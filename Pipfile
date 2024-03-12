@@ -1,0 +1,23 @@
+[[source]]
+url = "https://pypi.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+django = "*"
+django-rest-framework = "*"
+django-crispy-forms = "*"
+requests = "*"
+pytest = "*"
+django-debug-toolbar = "*"
+mysqlclient = "*"
+pillow = "*"
+django-login-required-middleware = "*"
+django-use-email-as-username = "*"
+python-dotenv = "*"
+python-decouple = "*"
+
+[dev-packages]
+
+[requires]
+python_version = "3.10"

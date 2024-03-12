@@ -1,0 +1,173 @@
+{%load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Top-Choice Bank || Dashboard</title>
+    
+    <link rel="stylesheet" href="{% static 'CSS/dashboard.css' %}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.1.2/css/all.min.css">
+    <link rel="icon" href="{% static 'Img/t.svg' %}">
+</head>
+<body>
+    <div class="container" id="top">
+        <nav class="dash-nav">
+            <ul>
+                <li><a href="{% url 'home' %}" class="dash-logo">
+                    <img src="{% static 'Img/logo.png' %}" alt="myLogo">
+                    <span class="nav-item">TOP-CHOICE BANK</span>
+                </a></li>
+                
+                <li><a href="{% url 'dashboard' %}#" id="side-button-1">
+                    <i class="fas fa-wallet"></i>
+                    <span class="nav-item">Wallet</span>
+                </a></li>
+
+                <li><a href="{% url 'dashboard' %}#" id="side-button-2">
+                    <i class="fas fa-exchange"></i>
+                    <span class="nav-item">Transfer</span>
+                </a></li>
+                
+                <li><a href="{% url 'dashboard' %}#" id="side-button-3">
+                    <i class="fas fa-money-check-alt"></i>
+                    <span class="nav-item">Deposit</span>
+                </a></li>
+
+                <li><a href="{% url 'dashboard' %}#" id="side-button-4">
+                    <i class="fas fa-random"></i>
+                    <span class="nav-item">Withdraw</span>
+                </a></li>
+
+                <li><a href="{% url 'logout' %}" class="logout" id="logout">
+                    <i class="fas fa-sign-out-alt"></i>
+                    <span class="nav-item">Logout</span>
+                </a></li>
+            </ul>
+        </nav>
+
+        <div class="overlay">
+            
+        </div>
+        <section class="main">
+            <div class="main-top">
+                <a href="{% url 'profile' %}">
+                    <div class="circular-container">
+                        {% if context.image %}
+                        <img src="{{ context.image.url }}" alt="Profile"/>
+                        {% else %}
+                        <img src="{% static 'img/icon.jpg' %}" alt="Profile"/>
+                        {% endif %}
+                    </div>
+                </a>
+                <h2>Hey, <span id="name">{{ context.nickname }}</span></h2>
+                <h3 id="balance-display">Balance: 
+                    &#x20A6;<span id="balance-value">{{ context.balance }}</span>
+                    <span id="hidden"> **** </span>
+                    <span  id="eyes">
+                        <i id="show-balance" class="fas fa-eye open-eye"></i>
+                        <i id="hide-balance" class="fas fa-eye-slash close-eye" style="display: none;"></i>
+                    </span>
+                </h3>
+                
+            </div>
+        
+            <div class="cards">
+                <div class="card-details">
+                    <i class="fas fa-wallet"></i>
+                    <h2>Wallet</h2>
+                    <p>Check available currencies</p>
+                    <a href="#top" id="button-1"><button type="button" id="button-1">CHECK</button></a>
+
+                    <div class="popup" id="popup-balance">
+                        <i class="fas fa-times cancel-pop1"></i>
+                        <p class="amount">Your Balance is: </p>
+                        <button type="button" id="close-popup">OK</button>
+                    </div>
+                </div>
+
+                <div class="card-details">
+                    <i class="fas fa-exchange"></i>
+                    <h2>Transfer</h2>
+                    <p>Make Transfer here</p>
+                    <a href="#top" id="button-2"><button type="button" id="button-2">TRANSFER</button></a>
+
+                    <div class="popup" id="popup-transfer">
+                        <i class="fas fa-times cancel-pop2"></i>
+                        <input type="number" name="transfer" id="transfer-amount" placeholder="Amount to Transfer"> <br>
+
+                        <input type="name" name="transfer-name" id="transfer-name" placeholder="To (Name of the receiver)"> <br>
+                        <button type="button" id="close-transfer-popup">Transfer</button>
+                    </div>
+                </div>
+
+            
+
+                <div class="card-details">
+                    <i class="fas fa-money-check-alt"></i>
+                    <h2>Deposit</h2>
+                    <p>Make Deposits here</p>
+                    <a href="#top" id="button-3"><button type="button" id="button-3">DEPOSIT</button></a>
+
+                    <div class="popup" id="popup-deposit">
+                        <i class="fas fa-times cancel-pop3"></i>
+                        <input type="number" name="deposit" id="deposit" placeholder="Amount to Deposit"> <br>
+                        <button type="button" id="close-deposit-popup">Deposit</button>
+                    </div>
+                </div>
+
+                <div class="card-details">
+                    <i class="fas fa-random"></i>
+                    <h2>Withdraw</h2>
+                    <p>Make a withdraw here</p>
+                    <a href="#top" id="button-4"><button type="button" id="button-4">WITHDRAW</button></a>
+
+                    <div class="popup" id="popup-withdraw">
+                        <i class="fas fa-times cancel-pop4"></i>
+                        <input type="number" name="withdraw" id="withdraw" placeholder="Amount to Withdraw"> <br>
+                        <button type="button" id="close-withdraw-popup">Withdraw</button>
+                    </div>
+                </div>
+                
+            </div>
+            <section class="bottom-card">
+                <h1>TOP-CHOICE PAY</h1>
+                <div class="bottom-card-box">
+                    <ul>
+                        <li class="integrity-acc active">TOP-CHOICE ACCOUNTS</li>
+                    </ul>
+                    <div class="bottom-card-details">
+                        <div class="bottom-box-details box1">
+                            <h3>TOP-CHOICE- CURRENT</h3>
+                            <button>Read more</button>
+                        </div>
+
+                        <div class="bottom-box-details box2">
+                            <h3>TOP-CHOICE- SAVINGS</h3>
+                            <button>Read more</button>
+                        </div>
+
+                        <div class="bottom-box-details box3">
+                            <h3>TOP-CHOICE- DOMICILLIARY</h3>
+                            <button>Read more</button>
+                        </div>
+
+                        <div class="trans-history-details">
+                            <div class="text-area"></div>
+                        </div>
+                    </div>
+
+                    
+                </div>
+            </section>
+        </section>
+    </div>
+
+
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
+    <script src="{% static 'scripts/dashboard.js' %}"></script>
+
+    
+</body>
+</html>

@@ -1,0 +1,145 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Top-Choice Bank || Register Page</title>
+    <link rel="stylesheet" href="{% static 'CSS/register.css' %}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.1.2/css/all.min.css">
+    <link rel="icon" href="{% static 'Img/t.svg' %}">
+    <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.6.1/css/all.css" integrity="sha384-gfdkjb5BdAXd+lj+gudLWI+BXq4IuLW5IT+brZEZsLFm++aCMlF1V92rMkPaX4PP" crossorigin="anonymous"> 
+    <script src="https://cdn.jsdelivr.net/npm/jquery@3.5.1/dist/jquery.slim.min.js" integrity="sha384-DfXdz2htPH0lsSSs5nCTpuj/zy4C+OGpamoFVy38MVBnE+IbbVYUew+OrCXaRkfj" crossorigin="anonymous"></script>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
+    <script src="https://code.jquery.com/jquery-3.7.1.js" integrity="sha256-eKhayi8LEQwp4NKxN+CfCh+3qOVUtJn3QNZ0TciWLP4=" crossorigin="anonymous"></script>
+</head>
+<body>
+
+
+    <header class="cont" id="register">
+        <nav class="nav">
+            <div class="logo">
+                <a href="{% url 'home' %}"><img src="{% static 'Img/logo.png' %}" alt="logo"></a> 
+               <a href="{% url 'home' %}"><h2>Top-Choice Bank</h2></a>
+            </div>
+
+            
+            <div class="toggle">
+                <i class="fa-solid fa-bars menu_open"></i>
+                <i class="fa-solid fa-xmark menu_close"></i>
+            </div>
+
+            <div class="nav-links">
+                <div class="menu">
+                     <ul>
+                        <li><a href="{% url 'home' %}">Home</a></li>
+                        <li><a href="{% url 'home' %}#features">Features</a></li>
+                        <li><a href="{% url 'home' %}#company">Company</a></li>
+                        <li><a href="{% url 'home' %}#contact">Contact</a></li>
+                    </ul>
+                </div>
+            </div>
+        </nav>
+        <div id="success-msg">
+            <div id="first-div" >
+                <b>Account created successfully</b> 
+            </div>
+            <div id = "success" >
+                <div class="success-checkmark">
+                    <div class="check-icon">
+                        <span class="icon-line line-tip"></span>
+                        <span class="icon-line line-long"></span>
+                        <div class="icon-circle"></div>
+                        <div class="icon-fix"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+
+        <form id="register-form" method="POST" autocomplete="off" class="form">
+            {% csrf_token %}
+            <div class="login-top-text">
+                <h2>CREATE ACCOUNT</h2>
+                <p>Kindly go through the following to <br> create an account.</p>
+            </div>
+                <h2 class="register">REGISTER</h2>
+                <p class="register-error"></p>
+                <div id="password-strength" class="text-danger mb-3">
+                    {% for message in messages %}
+                    {{message}}<br />
+                    {% endfor %}
+                </div>
+            
+            <div class="input">
+                    <label for="first_name">First Name</label>
+                    <input type="name" name="first_name" class="first-name" id="first_name" placeholder="First Name" autocomplete="off">
+                    <span class="input-granted" id="name-granted"></span>
+                    <span class="input-error" id="name-error"></span>
+            </div>
+            <div class="input">
+                <label for="last_name">Last Name</label>
+                <input type="name" name="last_name" class="last-name" id="last_name" placeholder="Last Name" autocomplete="off">
+                <span class="input-granted" id="name-granted"></span>
+                <span class="input-error" id="name-error"></span>
+            </div>
+            
+            <div class="input">
+                    <label for="email">Email</label>
+                    <input type="email" name="email" id="email" placeholder="Valid Email adress" autocomplete="off">
+                    <span class="input-granted" id="email-granted"></span>
+                    <span class="input-error" id="email-error"></span>
+            </div>
+            <div class="input input-password">
+                <label for="password1">Password</label>
+                <input type="password" name="password1" id="password1" placeholder="Input strong password" autocomplete="off">
+                <span class="input-granted" id="pass-granted"></span>
+                <span class="input-error" id="pass-error"></span>
+                <i class="fas fa-eye open-eye"></i>
+                <i class="fas fa-eye-slash close-eye"></i>
+            </div>
+
+            <div class="input input-password">
+                <label for="password2">Retype Password</label>
+                <input type="password" name="password2" id="password2" placeholder="Retype Password" autocomplete="off">
+                <span class="input-granted" id="pass-granted"></span>
+                <span class="input-error" id="pass-error"></span>
+            </div>
+            
+            <button type="submitbtn" id="submit">REGISTER</button>
+
+            <div class="login-bottom-text">
+                <p>Already have an account? <span><a href="{% url 'login' %}">LOGIN</a></span> </p>
+            </div>
+
+
+        </form>
+        {% if condition %}
+        <script>
+            const reg = document.getElementById("register-form")
+            function check() {
+                success.style.display = "initial"
+                $(".check-icon").hide();
+                setTimeout(function () {
+                $(".check-icon").show();
+                }, 20);
+            }
+            // Call the function when the page loads
+            document.addEventListener('DOMContentLoaded', function() {
+                reg.style.display= "none"
+                check();
+                setTimeout(() => {
+                window.location.href = "/profile/"
+                }, 5000);
+            });
+        </script>
+        {% endif %}
+
+        <div class="top">
+            <a href="/"></i></a>
+        </div>
+    </header>
+</body>
+    <script src="{% static 'scripts/register.js' %}"></script>
+</html>
