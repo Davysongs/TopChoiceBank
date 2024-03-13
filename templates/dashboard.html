@@ -52,6 +52,12 @@
         </div>
         <section class="main">
             <div class="main-top">
+                <div id="InfoBanner"  {% if context.pin %} style="display :none;"{% else %}style="display: block;"{% endif %}>
+                    <span>
+                        &#9888;
+                      Complete your profile to perform transactions !!
+                    </span> 
+                </div>
                 <a href="{% url 'profile' %}">
                     <div class="circular-container">
                         {% if context.image %}

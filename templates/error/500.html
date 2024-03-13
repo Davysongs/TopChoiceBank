@@ -1,3 +1,4 @@
+{% load static %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -45,9 +46,11 @@
 </head>
 <body>
     <div class="container">
-        <div class="server-image">
-            <img src="server_error_image.jpg" alt="Server Error">
-        </div>
+        <a href="{% url 'home' %}">
+            <div class="server-image">
+                <img src="{% static 'img/logo.png' %}" alt="Server Error">
+            </div>
+        </a>
         <h1>500 - Server Error</h1>
         <p>Oops! Something went wrong on our server. We apologize for the inconvenience. Our team has been notified and we are working to fix the issue as soon as possible. Please try again later.</p>
     </div>

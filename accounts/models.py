@@ -2,6 +2,7 @@ from django.db import models
 from django.contrib.auth import get_user_model
 from django.db.models.signals import post_save
 from django.dispatch import receiver
+from django.contrib.auth.hashers import make_password, check_password
 import random
 import string
 
@@ -36,6 +37,18 @@ class Account(models.Model):
     def create_user_account(sender, instance, created, **kwargs):
         if created:
             Account.objects.create(user=instance)
+    
+    
+    def save(self, *args, **kwargs):
+        # Check if pin is changed before saving
+        if self.pin and not self.pin_hashed:
+            # Hash the pin and save it
+            self.pin_hashed = make_password(self.pin)
+        super().save(*args, **kwargs)
+
+    def check_pin(self, pin):
+        # Check if the provided pin matches the hashed pin
+        return check_password(pin, self.pin_hashed)
 
             
     def __str__(self):

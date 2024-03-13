@@ -3,6 +3,7 @@ from django.shortcuts import render,redirect
 from login_required import login_not_required
 from django.http import JsonResponse
 import json
+from Base.middlewares import CustomException
 # Create your views here.
 def deposit(request):
     if request.method == "POST" and request.is_ajax():
@@ -52,8 +53,11 @@ def transfer(request):
 def dashboard(request):
     if request.method == "GET":
         user = request.user
-        details = Account.objects.get(user = user)
-        return render(request, "dashboard.html", {'context':details})
+        try:
+            details = Account.objects.get(user = user)
+            return render(request, "dashboard.html", {'context':details})
+        except:
+            return redirect('logout')
     elif request.method=="POST":
         pass
     

@@ -11,7 +11,7 @@ from custom_user.models import User
 from django.views import View
 from django.urls import reverse
 from django.core.mail import EmailMessage
-from django.utils.encoding import force_bytes, DjangoUnicodeDecodeError,force_str
+from django.utils.encoding import force_bytes,force_str
 from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
 from django.contrib.sites.shortcuts import get_current_site
 from .utils import token_generator
@@ -67,7 +67,7 @@ def register_view(request):
                 [email]
             )        
             email.send(fail_silently=False)
-            messages.info(request,"Check your email for an activation link")
+            messages.add_message(request, messages.INFO, "Check your email for an activation link")
             condition = True
             return render(request, "register.html", {'condition': condition})
         else:
@@ -76,7 +76,6 @@ def register_view(request):
                 for error in errors:
                     messages.error(request, f"{field}: {error}")
             return render(request, "register.html", {"form": form})
-
     if request.method == "GET":
         form = SignUpForm()
         return render(request, "register.html", {"form": form})
@@ -87,9 +86,6 @@ class VerificationView(View):
         try:
             uid = force_str(urlsafe_base64_decode(uidb64))
             user = User.objects.get(pk=uid)
-            print(user)
-
-
         except (TypeError, ValueError, OverflowError, User.DoesNotExist):
             user = None
         
@@ -106,14 +102,12 @@ def logout_user(request):
     logout(request)
     return redirect('home')
 
-
-
 def profile(request):
     user = request.user
     try:
         details = Account.objects.get(user=user)
     except Account.DoesNotExist:
-        return CustomException("Your account isnt properly configured. See an Admin")
+        raise CustomException("Your account isnt properly configured. Contact an Admin")
 
     if request.method == "GET":
         form = UserForm(instance=details)  # Populate form with existing data
