@@ -25,60 +25,49 @@ close_eye.addEventListener('click', function(){
     }
  
  })
+ document.addEventListener('DOMContentLoaded', function() {
+    const form = document.getElementById('register-form');
+    const password1 = document.getElementById('password1');
+    const password2 = document.getElementById('password2');
+    const email = document.getElementById('email');
+    const firstName = document.getElementById('first_name');
+    const lastName = document.getElementById('last_name');
 
-document.getElementById('register-form').addEventListener('submitBtn', function(event) {
-    event.preventDefault(); // Prevent form submission
+    form.addEventListener('submit', function(event) {
+        if (!validatePasswords()) {
+            event.preventDefault();
+        } else if (!validateEmail()) {
+            event.preventDefault();
+        } else if (!validateName(firstName)) {
+            event.preventDefault();
+        } else if (!validateName(lastName)) {
+            event.preventDefault();
+        }
+    });
 
-    // Retrieve form input values
-    var firstName = document.getElementById('first_name').value;
-    var lastName = document.getElementById('last_name').value;
-    var email = document.getElementById('email').value;
-    var password1 = document.getElementById('password1').value;
-    var password2 = document.getElementById('password2').value;
-
-    // Validation checks
-    var errorMessages = [];
-
-    if (!firstName.trim()) {
-        errorMessages.push('First name is required.');
+    function validatePasswords() {
+        if (password1.value !== password2.value) {
+            alert('Passwords do not match');
+            return false;
+        }
+        return true;
     }
 
-    if (!lastName.trim()) {
-        errorMessages.push('Last name is required.');
+    function validateEmail() {
+        const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailPattern.test(email.value)) {
+            alert('Invalid email address');
+            return false;
+        }
+        return true;
     }
 
-    if (!email.trim()) {
-        errorMessages.push('Email is required.');
-    } else if (!isValidEmail(email)) {
-        errorMessages.push('Invalid email format.');
+    function validateName(input) {
+        const namePattern = /^[a-zA-Z]+$/;
+        if (!namePattern.test(input.value)) {
+            alert('Invalid ' + input.name);
+            return false;
+        }
+        return true;
     }
-
-    if (!password1.trim()) {
-        errorMessages.push('Password is required.');
-    }
-
-    if (password1 !== password2) {
-        errorMessages.push('Passwords do not match.');
-    }
-
-    // Display error messages
-    var errorContainer = document.querySelector('.register-error');
-    errorContainer.innerHTML = '';
-    if (errorMessages.length > 0) {
-        errorMessages.forEach(function(message) {
-            var errorMessage = document.createElement('p');
-            errorMessage.textContent = message;
-            errorContainer.appendChild(errorMessage);
-        });
-        return; // Exit function if there are errors
-    }
-
-    // If no errors, submit the form
-    event.target.submit();
 });
-
-// Function to check if the email is valid
-function isValidEmail(email) {
-    var emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return emailRegex.test(email);
-}
