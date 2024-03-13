@@ -42,6 +42,8 @@ close_eye.addEventListener('click', function(){
             event.preventDefault();
         } else if (!validateName(lastName)) {
             event.preventDefault();
+        }else if (!checkEmptyFields()) {
+            event.preventDefault();
         }
     });
 
@@ -70,4 +72,15 @@ close_eye.addEventListener('click', function(){
         }
         return true;
     }
+    function checkEmptyFields() {
+        const inputs = [firstName, lastName, email, password1, password2];
+        for (let input of inputs) {
+            if (input.value.trim() === '') {
+                alert('Please fill in all fields');
+                return false;
+            }
+        }
+        return true;
+    }
+        
 });

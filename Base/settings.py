@@ -1,5 +1,6 @@
 from pathlib import Path
 import os
+import django_heroku
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -45,6 +46,7 @@ MIDDLEWARE = [
     'Base.middlewares.CustomErrorHandlerMiddleware',
     'Base.middlewares.AuthenticatedRedirectMiddleware',
     'Base.middlewares.AjaxMiddleware',
+    'django_auto_logout.middleware.auto_logout',
 ]
 
 
@@ -61,6 +63,7 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                'django_auto_logout.context_processors.auto_logout_client',
             ],
         },
     },
@@ -129,6 +132,10 @@ STATICFILES_DIRS = [
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
+#session timeout
+AUTO_LOGOUT = {"IDLE_TIME" : 300, 'REDIRECT_TO_LOGIN_IMMEDIATELY': True,
+               'MESSAGE': 'The session has expired. Please login again to continue.'}
+
 # Media management
 MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
@@ -150,4 +157,8 @@ EMAIL_HOST_PASSWORD = 'lqvvdmxcswrmovvr'
 EMAIL_USE_TLS = True
 EMAIL_PORT = 587
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+
+
+#heroku
+django_heroku.settings(locals())
 

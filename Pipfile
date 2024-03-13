@@ -17,6 +17,10 @@ django-use-email-as-username = "*"
 python-dotenv = "*"
 python-decouple = "*"
 six = "*"
+django-heroku = "*"
+gunicorn = "*"
+django-auto-logout = "*"
+pytz = "*"
 
 [dev-packages]
 
