@@ -9,8 +9,13 @@ from accounts.models import Account
 from django.http import JsonResponse
 from custom_user.models import User
 from django.views import View
+from django.urls import reverse
 from django.core.mail import EmailMessage
-
+from django.utils.encoding import force_bytes, DjangoUnicodeDecodeError,force_str
+from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
+from django.contrib.sites.shortcuts import get_current_site
+from .utils import token_generator
+from django.utils.decorators import method_decorator
 
 # Create your views here.
 @login_not_required
@@ -43,14 +48,18 @@ def register_view(request):
             if User.objects.filter(email=email).exists():
                 messages.warning(request, 'Email already exists! Please login instead of registration.')
                 return render(request, 'register.html', {'form': form})
-            user = User.objects.create_user(email=email, password=form.cleaned_data.get('password1'),
-                                            last_name = form.cleaned_data.get('last_name'),
-                                              first_name = form.cleaned_data.get('first_name'))
+            first_name = form.cleaned_data.get('first_name')
+            last_name = form.cleaned_data.get('last_name')
+            password = form.cleaned_data.get('password1')
+            user = User.objects.create_user(email=email, password=password,last_name = last_name,first_name = first_name)
             user.is_active= False
             user.save()
-
-            subject = "[TOPCHOICEBANK] Verify your email"
-            body = "You linked up your Email to TOP CHOICE BANK APP successfully"
+            uidb64 = urlsafe_base64_encode(force_bytes(user.pk))
+            domain = get_current_site(request).domain
+            link = reverse('activate', kwargs={'uidb64':uidb64, 'token':token_generator.make_token(user)})
+            activate_url = f"http://{domain}{link}"
+            subject = "[TOPCHOICEBANK] Activate Your Account"
+            body = f"Hey {first_name},\n" "To activate  your account click on the following link:\n" + activate_url
             email = EmailMessage(
                 subject,
                 body,
@@ -58,6 +67,7 @@ def register_view(request):
                 [email]
             )        
             email.send(fail_silently=False)
+            messages.info(request,"Check your email for an activation link")
             condition = True
             return render(request, "register.html", {'condition': condition})
         else:
@@ -71,11 +81,25 @@ def register_view(request):
         form = SignUpForm()
         return render(request, "register.html", {"form": form})
 
+@method_decorator(login_not_required, name="dispatch")
 class VerificationView(View):
     def get(self, request, uidb64, token):
-        return redirect("login")
+        try:
+            uid = force_str(urlsafe_base64_decode(uidb64))
+            user = User.objects.get(pk=uid)
+            print(user)
 
 
+        except (TypeError, ValueError, OverflowError, User.DoesNotExist):
+            user = None
+        
+        if user is not None and token_generator.check_token(user, token):
+            user.is_active = True
+            user.save()
+            messages.add_message(request, messages.INFO, "Your account has been successfully activated")
+            return redirect("login")
+        
+        return render(request, 'error/404.html', {'error_message': "Account activation error"})
 
 #Logout
 def logout_user(request):
