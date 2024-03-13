@@ -48,9 +48,6 @@ def transfer(request):
 
 
 # Create your views here.
-@login_not_required
-def homepage(request):
-    return render(request, "index.html")
 
 def dashboard(request):
     if request.method == "GET":

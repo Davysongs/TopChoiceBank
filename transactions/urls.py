@@ -4,6 +4,5 @@ urlpatterns = [
     path('deposit', views.deposit, name="deposit"),
     path('transfer', views.transfer, name="transfer"),
     path('withdraw', views.withdraw, name="withdraw"),
-    path('', views.homepage, name="home"),
     path('dashboard/', views.dashboard, name= "dashboard"),
 ]

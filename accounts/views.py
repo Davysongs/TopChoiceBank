@@ -8,10 +8,15 @@ from Base.middlewares import CustomException
 from accounts.models import Account
 from django.http import JsonResponse
 from custom_user.models import User
+from django.views import View
 from django.core.mail import EmailMessage
 
 
 # Create your views here.
+@login_not_required
+def homepage(request):
+    return render(request, "index.html")
+
 #login 
 @login_not_required
 def login_view(request):
@@ -42,6 +47,8 @@ def register_view(request):
                                             last_name = form.cleaned_data.get('last_name'),
                                               first_name = form.cleaned_data.get('first_name'))
             user.is_active= False
+            user.save()
+
             subject = "[TOPCHOICEBANK] Verify your email"
             body = "You linked up your Email to TOP CHOICE BANK APP successfully"
             email = EmailMessage(
@@ -63,6 +70,11 @@ def register_view(request):
     if request.method == "GET":
         form = SignUpForm()
         return render(request, "register.html", {"form": form})
+
+class VerificationView(View):
+    def get(self, request, uidb64, token):
+        return redirect("login")
+
 
 
 #Logout
