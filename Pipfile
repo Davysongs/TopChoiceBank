@@ -21,6 +21,7 @@ gunicorn = "*"
 django-auto-logout = "*"
 pytz = "*"
 psycopg2 = "*"
+wheel = "*"
 
 [dev-packages]
 
