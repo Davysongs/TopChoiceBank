@@ -20,8 +20,8 @@ django-heroku = "*"
 gunicorn = "*"
 django-auto-logout = "*"
 pytz = "*"
-psycopg2 = "*"
 wheel = "*"
+psycopg2-binary = "*"
 
 [dev-packages]
 
