@@ -57,7 +57,7 @@ def register_view(request):
             uidb64 = urlsafe_base64_encode(force_bytes(user.pk))
             domain = get_current_site(request).domain
             link = reverse('activate', kwargs={'uidb64':uidb64, 'token':token_generator.make_token(user)})
-            activate_url = f"http://{domain}{link}"
+            activate_url = f"https://{domain}{link}"
             subject = "[TOPCHOICEBANK] Activate Your Account"
             body = f"Hey {first_name},\n" "To activate  your account click on the following link:\n" + activate_url
             email = EmailMessage(

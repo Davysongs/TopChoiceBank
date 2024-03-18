@@ -44,6 +44,7 @@
         <div id="success-msg">
             <div id="first-div" >
                 <b>Account created successfully</b> 
+                <h1>Check your email for a link to activate your account</h1>
             </div>
             <div id = "success" >
                 <div class="success-checkmark">
@@ -129,9 +130,6 @@
             document.addEventListener('DOMContentLoaded', function() {
                 reg.style.display= "none"
                 check();
-                setTimeout(() => {
-                window.location.href = "/profile/"
-                }, 5000);
             });
         </script>
         {% endif %}

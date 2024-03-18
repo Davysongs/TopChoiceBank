@@ -164,7 +164,7 @@ EMAIL_PORT = 587
 EMAIL_USE_TLS = True
 EMAIL_HOST_USER = 'koladegeorge5@gmail.com'
 EMAIL_HOST_PASSWORD = 'lqvvdmxcswrmovvr'
-
+DEFAULT_FROM_EMAIL = 'Top-Choice-Bank <no-reply@topchoicebank.com>'
 
 
 
