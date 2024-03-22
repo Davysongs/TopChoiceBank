@@ -80,6 +80,7 @@ def register_view(request):
         form = SignUpForm()
         return render(request, "register.html", {"form": form})
 
+#email link validation
 @method_decorator(login_not_required, name="dispatch")
 class VerificationView(View):
     def get(self, request, uidb64, token):
@@ -102,6 +103,7 @@ def logout_user(request):
     logout(request)
     return redirect('home')
 
+ #profile update and creation
 def profile(request):
     user = request.user
     try:

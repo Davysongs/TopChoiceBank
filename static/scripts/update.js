@@ -1,99 +1,117 @@
-const imageUpload = document.getElementById('image-upload');
-const imagePreview = document.getElementById('image-preview');
-const errorMessage = document.getElementById('upload-error');
-const errorMessages = document.querySelectorAll('.error-message');
-const form = document.getElementById('form')
-// Fetch form input values
-const phone = document.getElementById('phone').value.trim();
-const address = document.getElementById('address').value.trim();
-const city = document.getElementById('city').value.trim();
-const country = document.getElementById('country').value.trim();
-const postcode = document.getElementById('postcode').value.trim();
-const state = document.getElementById('state').value.trim();
-const pin1 = document.getElementById('pin').value.trim();
-const pin2 = document.getElementById('pin2').value.trim();
-var pinError = document.getElementById('pin-error')
-var phoneError = document.getElementById('phone-error')
-const editImageBtn = document.getElementById('editImageBtn');
-const editNicknameBtn = document.getElementById('editNickname');
-const nicknameInput = document.querySelector('input[name="nickname"]');
-const submitBtn = document.getElementById('submitBtn');
-
-
 document.addEventListener('DOMContentLoaded', function() {
+    const form = document.getElementById('form');
+    const imageUpload = document.getElementById('image-upload');
+    const imagePreview = document.getElementById('image-preview');
+    const errorMessage = document.getElementById('upload-error');
+    const errorMessages = document.querySelectorAll('.error-message');
+    const phoneInput = document.getElementById('phone');
+    const addressInput = document.getElementById('address');
+    const cityInput = document.getElementById('city');
+    const countryInput = document.getElementById('country');
+    const postcodeInput = document.getElementById('postcode');
+    const stateInput = document.getElementById('state');
+    const pinInput1 = document.getElementById('pin');
+    const pinInput2 = document.getElementById('pin2');
+    const pinError = document.getElementById('pin-error');
+    const phoneError = document.getElementById('phone-error');
+    const submitBtn = document.getElementById('submitBtn');
 
     form.addEventListener('submit', function(event) {
         event.preventDefault();
 
-        // Reset error message
+        // Reset error messages
         errorMessages.forEach(msg => msg.textContent = '');
+        document.getElementById('form-error').textContent = '';
+
         // Validate numeric inputs
-        if (!/^\d+$/.test(phone))  {
+        if (!/^\d+$/.test(phoneInput.value)) {
             phoneError.textContent = 'Phone number must be numeric';
-            return;
-        }
-        if (phone.length<=6){
-            phoneError.textContent = 'Phone number is too short';
+            phoneInput.focus();
             return;
         }
 
-        if (!/^\d+$/.test(pin1)|| !/^\d+$/.test(pin2)) {
+        if (phoneInput.value.length <= 6) {
+            phoneError.textContent = 'Phone number is too short';
+            phoneInput.focus();
+            return;
+        }
+
+        if (!/^\d+$/.test(pinInput1.value) || !/^\d+$/.test(pinInput2.value)) {
             pinError.textContent = 'PIN must be numeric';
+            pinInput1.focus();
             return;
         }
-        //check the length of both pins
-        if (pin1.length < 4) {
+
+        // Check the length of both pins
+        if (pinInput1.value.length < 4) {
             pinError.textContent = 'PIN 1 is too short';
+            pinInput1.focus();
             return;
         }
-        
-        if (pin2.length < 4) {
+
+        if (pinInput2.value.length < 4) {
             pinError.textContent = 'PIN 2 is too short';
+            pinInput2.focus();
             return;
         }
-        
-        //Check if pin1 and pin2 values match
-        if (pin1 !== pin2) {
+
+        // Check if pin1 and pin2 values match
+        if (pinInput1.value !== pinInput2.value) {
             pinError.textContent = 'PINs do not match';
+            pinInput2.focus();
             return;
-        }
-        else {
-            // Clear error message if values match
-            pinError.textContent = '';
         }
 
         // Check if any field is empty
-        if ( phone === '' || address === '' || city === '' || country === '' || postcode === '' || state === '' || pin1 === '' || pin2 === ''  ) {
-            document.getElementById('form-error').textContent = 'Please fill in all fields';
-            return;
+        const requiredInputs = [phoneInput, addressInput, cityInput, countryInput, postcodeInput, stateInput, pinInput1, pinInput2];
+        for (const input of requiredInputs) {
+            if (!input.value.trim()) {
+                document.getElementById('form-error').textContent = 'Please fill in all fields';
+                input.focus();
+                return;
+            }
         }
-        // Reset previous error messages
-        errorMessage.textContent = '';
 
         // Check if a file has been selected
         if (!imageUpload.files || !imageUpload.files[0]) {
             errorMessage.textContent = 'Please select an image';
-            event.preventDefault(); // Prevent form submission
-        } else {
-            // Check if the file type is valid
-            const fileType = imageUpload.files[0].type;
-            if (!fileType.startsWith('image/')) {
-                errorMessage.textContent = 'Please select a valid image file';
-                return; // Prevent form submission
-            } else {
-                // Optionally, you can display a preview of the selected image
-                const file = imageUpload.files[0];
-                const reader = new FileReader();
-
-                reader.onload = function(e) {
-                    imagePreview.innerHTML = `<img src="${e.target.result}" alt="Image Preview">`;
-                };
-
-                reader.readAsDataURL(file);
-            }
+            return;
         }
 
-        // Submit the form if all validations pass
-        form.submit();
+        // Check if the file type is valid
+        const fileType = imageUpload.files[0].type;
+        if (!fileType.startsWith('image/')) {
+            errorMessage.textContent = 'Please select a valid image file';
+            return;
+        }
+
+        // Optionally, display a preview of the selected image
+        const file = imageUpload.files[0];
+        const reader = new FileReader();
+
+        reader.onload = function(e) {
+            imagePreview.innerHTML = `<img src="${e.target.result}" alt="Image Preview">`;
+        };
+
+        reader.readAsDataURL(file);
+
+        // Create and dispatch a submit event to trigger form submission
+        const submitEvent = new Event('submit', {
+            bubbles: true,
+            cancelable: true
+        });
+        form.dispatchEvent(submitEvent);
+    });
+
+    // Add event listener to the edit nickname button
+    const changeBtn = document.getElementById('change');
+    const editNicknameBtn = document.getElementById('editNickname');
+    const nicknameInput = document.querySelector('input[name="nickname"]');
+    editNicknameBtn.addEventListener('click', function() {
+        nicknameInput.readOnly = !nicknameInput.readOnly;
+        if (!nicknameInput.readOnly) {
+            nicknameInput.focus();
+        }
+        changeBtn.style.display= 'initial'
     });
 });

@@ -3,6 +3,7 @@ body {
     margin: 0;
     padding: 0;
     box-sizing: border-box;
+    background: #5c5eddc2;
 }
 
 .container {
@@ -11,6 +12,7 @@ body {
     padding: 20px;
     border: 1px solid #ccc;
     border-radius: 8px;
+    background: #fff;
 }
 .logo{
     display: flex;

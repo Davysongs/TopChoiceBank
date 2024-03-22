@@ -5,7 +5,8 @@
     <meta charset="UTF-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>User Information Form</title>
+    <title>{% if details %}{{ details.nickname }}{% else %} Account Form {% endif %}</title>
+    <link rel="icon" href="{% static 'Img/topicon.png' %}">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.1.2/css/all.min.css">
     <link rel="stylesheet" href="{% static 'css/update.css' %}">
 </head>
@@ -19,7 +20,7 @@
             {% csrf_token %}
             <span id="form-error" class="error-message"></span>
             <div id="upload-container">
-                <input type="file" name="image" id="image-upload" accept="image/*,.jpg,.png">
+                <input type="file" name="image" id="image-upload" accept="image/*,.jpg,.png" {% if details %}  readonly {% endif %}>
                 <div class="image-container">
                     <div id="image-preview">
                         <!-- Image preview will be displayed here -->
@@ -36,6 +37,7 @@
                 </button>
                 {% endif %}
             </div>
+            <button id="change" style="display: none;" >Save Changes</button>
             <div class="input-group">
                 <label for="phone">Phone</label><br>
                 <input type="tel" name="phone" id="phone" maxlength="13" placeholder= "ex: 070123456789" required  {% if details %} value="{{ details.phone }}" readonly{% endif %} >
