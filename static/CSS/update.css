@@ -70,7 +70,7 @@ button[type="submit"] {
     cursor: pointer;
 }
 
-#upload-container {
+.upload {
     text-align: center;
 }
 

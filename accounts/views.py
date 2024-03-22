@@ -16,6 +16,7 @@ from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
 from django.contrib.sites.shortcuts import get_current_site
 from .utils import token_generator
 from django.utils.decorators import method_decorator
+from django.views.decorators.csrf import csrf_exempt
 
 # Create your views here.
 @login_not_required
@@ -149,6 +150,29 @@ def profile(request):
             else:
                 # Form is not valid, handle the error scenario by rendering the form with errors
                 return render(request, 'update.html', {'details': details, 'form': form})
+@csrf_exempt
+def save_profile(request):
+    if request.method == 'POST' and request.is_ajax():
+        # Get user account
+        user_account = request.user.account
+
+        # Extract picture file and nickname from request
+        picture_file = request.FILES.get('picture')
+        nickname = request.POST.get('nickname')
+
+        # Update account fields
+        if picture_file:
+            user_account.image = picture_file
+        if nickname:
+            user_account.nickname = nickname
+
+        # Save account changes
+        user_account.save()
+
+        return JsonResponse({'message': 'Picture and nickname saved successfully.'}, status=200)
+    else:
+        return JsonResponse({'error': 'Only POST requests are allowed.'}, status=405)
+
 
 
 

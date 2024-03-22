@@ -104,14 +104,50 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     // Add event listener to the edit nickname button
+    const url = window.location.href
     const changeBtn = document.getElementById('change');
+    const imageBtn = document.getElementById('image-change');
     const editNicknameBtn = document.getElementById('editNickname');
     const nicknameInput = document.querySelector('input[name="nickname"]');
-    editNicknameBtn.addEventListener('click', function() {
+    editNicknameBtn.addEventListener('click', function(event) {
+        event.preventDefault();
         nicknameInput.readOnly = !nicknameInput.readOnly;
         if (!nicknameInput.readOnly) {
             nicknameInput.focus();
         }
         changeBtn.style.display= 'initial'
     });
+    imageBtn.addEventListener( 'click', function (event) {
+        event.preventDefault();
+        changeBtn.style.display= 'initial'
+    });
+    changeBtn.addEventListener('click', function(event){
+        event.preventDefault();
+        // Capture input values
+        const pictureFile = imageUpload.files[0];
+        const textValue = document.getElementById('nickname').value;
+
+        // Construct FormData object
+        const formData = new FormData();
+        formData.append('picture', pictureFile);
+        formData.append('text', textValue);
+
+        // Send AJAX request
+        $.ajax({
+            url: `${url}/save`,
+            type: 'POST',
+            data: formData,
+            processData: false,
+            contentType: false,
+            success: function(response) {
+                // Handle success response
+                console.log(response);
+            },
+            error: function(xhr, status, error) {
+                // Handle error response
+                console.error(xhr.responseText);
+            }
+        });
+
+    })
 });
