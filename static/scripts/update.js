@@ -94,13 +94,8 @@ document.addEventListener('DOMContentLoaded', function() {
         };
 
         reader.readAsDataURL(file);
-
-        // Create and dispatch a submit event to trigger form submission
-        const submitEvent = new Event('submit', {
-            bubbles: true,
-            cancelable: true
-        });
-        form.dispatchEvent(submitEvent);
+        // Submit the form manually
+        form.submit();
     });
 
     // Add event listener to the edit nickname button
@@ -109,45 +104,63 @@ document.addEventListener('DOMContentLoaded', function() {
     const imageBtn = document.getElementById('image-change');
     const editNicknameBtn = document.getElementById('editNickname');
     const nicknameInput = document.querySelector('input[name="nickname"]');
-    editNicknameBtn.addEventListener('click', function(event) {
-        event.preventDefault();
-        nicknameInput.readOnly = !nicknameInput.readOnly;
-        if (!nicknameInput.readOnly) {
-            nicknameInput.focus();
-        }
-        changeBtn.style.display= 'initial'
-    });
-    imageBtn.addEventListener( 'click', function (event) {
-        event.preventDefault();
-        changeBtn.style.display= 'initial'
-    });
-    changeBtn.addEventListener('click', function(event){
-        event.preventDefault();
-        // Capture input values
-        const pictureFile = imageUpload.files[0];
-        const textValue = document.getElementById('nickname').value;
-
-        // Construct FormData object
-        const formData = new FormData();
-        formData.append('picture', pictureFile);
-        formData.append('text', textValue);
-
-        // Send AJAX request
-        $.ajax({
-            url: `${url}/save`,
-            type: 'POST',
-            data: formData,
-            processData: false,
-            contentType: false,
-            success: function(response) {
-                // Handle success response
-                console.log(response);
-            },
-            error: function(xhr, status, error) {
-                // Handle error response
-                console.error(xhr.responseText);
-            }
-        });
-
+    const closeError = document.getElementById('close-msg2');
+    const closeSuccess = document.getElementById('close-msg');
+    const alerts = document.getElementById("alerts")
+    closeError.addEventListener('click', function(event){
+        event.preventDefault()
+        alerts.style.display = "none"
     })
+    closeSuccess.addEventListener('click', function(event){
+        event.preventDefault()
+        alerts.style.display = "none"
+    })
+
+    if(editNicknameBtn || imageBtn ){
+        editNicknameBtn.addEventListener('click', function(event) {
+            event.preventDefault();
+            nicknameInput.readOnly = !nicknameInput.readOnly;
+            if (!nicknameInput.readOnly) {
+                nicknameInput.focus();
+            }
+            changeBtn.style.display= 'initial'
+        });
+        imageBtn.addEventListener( 'click', function (event) {
+            event.preventDefault();
+            changeBtn.style.display= 'initial'
+        });
+        changeBtn.addEventListener('click', function(event){
+            event.preventDefault();
+            // Capture input values
+            const pictureFile = imageUpload.files[0];
+            const textValue = document.getElementById('nickname').value;
+    
+            // Construct FormData object
+            const formData = new FormData();
+            formData.append('picture', pictureFile);
+            formData.append('nickname', textValue);
+    
+            // Send AJAX request
+            $.ajax({
+                url: `${url}save`,
+                type: 'POST',
+                data: formData,
+                processData: false,
+                contentType: false,
+                success: function(response) {
+                    // Handle success response
+                    changeBtn.style.display= 'none'
+                    closeSuccess.style.display = 'initial'
+                    console.log(response);
+                },
+                error: function(xhr, status, error) {
+                    // Handle error response
+                    closeError.style.display = 'inintial'
+                    console.error(xhr.responseText);
+                }
+            });
+    
+        })
+    }
+
 });

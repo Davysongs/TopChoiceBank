@@ -1,7 +1,6 @@
 
 var form_fields = document.getElementsByTagName('input')
 const success = document.getElementById("success-msg")
-success.style.display= "none"
 
 //password visibility
 const password =document.querySelector('#password1');

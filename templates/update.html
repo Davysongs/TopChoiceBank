@@ -12,11 +12,43 @@
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
 </head>
 <body>
-    <div class="container">
+    <div class="form_container">
+        <div>
+            <a href="{% url 'dashboard' %}">Dashboard</a>
+        </div>
         <div class="logo">
             <a href="{% url 'dashboard' %}"><img src="{% static 'Img/logo.png' %}" alt="Logo"></a> 
             <a href="{% url 'dashboard' %}"><h2>Top-Choice Bank</h2></a>
         </div>
+        <section id="alerts">
+            <div class="container mt-5" style="display: none;" >
+                <div class="row">      
+                    <div class="col-sm-12">
+                        <div class="alert fade alert-simple alert-warning alert-dismissible text-left font__family-montserrat font__size-16 font__weight-light brk-library-rendered rendered show" role="alert" data-brk-library="component__alert">
+                            <button id="close-msg2" type="button" class="close font__size-18" data-dismiss="alert">
+                                <span aria-hidden="true">
+                                <i class="fa fa-times warning"></i>
+                                </span>
+                                <span class="sr-only">Close</span>
+                            </button>
+                            <i class="start-icon fa fa-exclamation-triangle faa-flash animated"></i>
+                            <strong class="font__weight-semibold">Warning!</strong> There appears to be an error. Try again!
+                        </div>
+                    </div>
+            
+                    <div class="col-sm-12" style="display: none;">
+                        <div class="alert fade alert-simple alert-primary alert-dismissible text-left font__family-montserrat font__size-16 font__weight-light brk-library-rendered rendered show" role="alert" data-brk-library="component__alert">
+                            <button id="close-msg" type="button" class="close font__size-18" data-dismiss="alert">
+                                <span  aria-hidden="true"><i class="fa fa-times alertprimary"></i></span>
+                                <span class="sr-only">Close</span>
+                            </button>
+                            <i class="start-icon fa fa-thumbs-up faa-bounce animated"></i>
+                            <strong class="font__weight-semibold">Done</strong> Profile Update successful
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
         <form method="POST"  id="form">
             {% csrf_token %}
             <span id="form-error" class="error-message"></span>
@@ -45,7 +77,7 @@
                 </button>
                 {% endif %}
             </div>
-            <button id="change" style="display: none;" >Save Changes</button>
+            <button type="submit" id="change" style="display: none;" >Save Changes</button>
             <div class="input-group">
                 <label for="phone">Phone</label><br>
                 <input type="tel" name="phone" id="phone" maxlength="13" placeholder= "ex: 070123456789" required  {% if details %} value="{{ details.phone }}" readonly{% endif %} >
