@@ -6,7 +6,7 @@
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% if details %}{{ details.nickname }}{% else %} Account Form {% endif %}</title>
-    <link rel="icon" href="{% static 'Img/topicon.png' %}">
+    <link rel="icon" href="{% static 'images/topicon.png' %}">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.1.2/css/all.min.css">
     <link rel="stylesheet" href="{% static 'css/update.css' %}">
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
@@ -17,7 +17,7 @@
             <a href="{% url 'dashboard' %}">Dashboard</a>
         </div>
         <div class="logo">
-            <a href="{% url 'dashboard' %}"><img src="{% static 'Img/logo.png' %}" alt="Logo"></a> 
+            <a href="{% url 'dashboard' %}"><img src="{% static 'images/logo.png' %}" alt="Logo"></a> 
             <a href="{% url 'dashboard' %}"><h2>Top-Choice Bank</h2></a>
         </div>
         <section id="alerts">
@@ -129,7 +129,7 @@
     imagePreview.innerHTML = `<img id="default-image" 
     {% if details.image %} src="{{ details.image.url }}"
     {% else %}
-        src="{% static 'img/profile.gif' %}" width="500px" height"500px"
+        src="{% static 'images/profile.gif' %}" width="500px" height"500px"
     {% endif %} alt="Default Image" >`
     const defaultImage = document.getElementById('upload-container');
     defaultImage.addEventListener('click', function() {
@@ -150,5 +150,5 @@
         }
     });
 </script>
-<script src="{% static 'scripts/update.js' %}"></script>
+<script src="{% static 'js/update.js' %}"></script>
 </html>

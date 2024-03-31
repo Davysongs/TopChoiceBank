@@ -10,17 +10,16 @@
         <meta name="keywords" content="Bank App Template | Website Template | Professional Software Developer">
         <meta http-equiv="author" content="Joshua Dada">
 
-        <link rel="icon" type="image"  href="{% static 'Img/topicon.png' %}">
+        <link rel="icon" type="image"  href="{% static 'images/topicon.png' %}">
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.1.2/css/all.min.css">
 
         <title>Top Choice Bank- Your number one people bank.</title>
-        <link rel="stylesheet" href="{% static 'CSS/style.css' %}">
+        <link rel="stylesheet" href="{% static 'css/style.css' %}">
         <style>
             .container{
                 width: 100%;
                 height: 100vh;
-                /* background: linear-gradient(rgba(35, 62, 87, 0.985), rgba(35, 62, 87, 0.877), rgba(35, 62, 87, 0.804)), url(/Img/logo.png); */
-                background: linear-gradient(rgba(0, 0, 0, 0.981), rgba(0, 0, 0, 0.966), rgba(35, 62, 87, 0.994)), url("{% static 'Img/logo.png' %}");
+                background: linear-gradient(rgba(0, 0, 0, 0.981), rgba(0, 0, 0, 0.966), rgba(35, 62, 87, 0.994)), url("{% static 'images/logo.png' %}");
                 background-position: center;
                 background-size: cover;
                 animation: slide 90s infinite;
@@ -28,7 +27,7 @@
             }
                     
             #preloader{
-                background: var(--white-color) url("{% static 'img/preloader.gif' %}");
+                background: var(--white-color) url("{% static 'images/preloader.gif' %}");
                 background-repeat: no-repeat;
                 background-position: center;
                 background-size: 10%;
@@ -39,33 +38,33 @@
             }
             @keyframes slide{
                 0%{
-                    background: linear-gradient(rgba(0, 0, 0, 0.981), rgba(0, 0, 0, 0.966), rgba(35, 62, 87, 0.994)), url("{% static 'Img/logo.png' %}");
+                    background: linear-gradient(rgba(0, 0, 0, 0.981), rgba(0, 0, 0, 0.966), rgba(35, 62, 87, 0.994)), url("{% static 'images/logo.png' %}");
                     background-position: bottom;
                     background-size: cover;
                 }
                 20%{
-                    background: linear-gradient(rgba(0, 0, 0, 0.981), rgba(0, 0, 0, 0.966), rgba(35, 62, 87, 0.994)), url("{% static 'Img/topicon.png' %}");
+                    background: linear-gradient(rgba(0, 0, 0, 0.981), rgba(0, 0, 0, 0.966), rgba(35, 62, 87, 0.994)), url("{% static 'images/topicon.png' %}");
                     background-position: right;
                     background-size: cover;
                 }
                 20.01%{
-                    background: linear-gradient(rgba(0, 0, 0, 0.981), rgba(0, 0, 0, 0.966), rgba(35, 62, 87, 0.994)), url("{% static 'Img/faster-transactions.png' %}");
+                    background: linear-gradient(rgba(0, 0, 0, 0.981), rgba(0, 0, 0, 0.966), rgba(35, 62, 87, 0.994)), url("{% static 'images/faster-transactions.png' %}");
                     background-position: bottom;
                     background-size: cover;
                 }
                 50%{
-                    background: linear-gradient(rgba(0, 0, 0, 0.981), rgba(0, 0, 0, 0.966), rgba(35, 62, 87, 0.994)), url("{% static 'Img/logo.png' %}");
+                    background: linear-gradient(rgba(0, 0, 0, 0.981), rgba(0, 0, 0, 0.966), rgba(35, 62, 87, 0.994)), url("{% static 'images/logo.png' %}");
                     background-position: left;
                     background-size: cover;
                 }
                 50.01%{
-                    background: linear-gradient(rgba(0, 0, 0, 0.981), rgba(0, 0, 0, 0.966), rgba(35, 62, 87, 0.994)), url("{% static 'Img/transfer.png' %}");
+                    background: linear-gradient(rgba(0, 0, 0, 0.981), rgba(0, 0, 0, 0.966), rgba(35, 62, 87, 0.994)), url("{% static 'images/transfer.png' %}");
                     background-position: top;
                     background-size: cover;
                 }
                 
                 100%{
-                    background: linear-gradient(rgba(0, 0, 0, 0.981), rgba(0, 0, 0, 0.966), rgba(35, 62, 87, 0.994)), url("{% static 'Img/wallet.png' %}");
+                    background: linear-gradient(rgba(0, 0, 0, 0.981), rgba(0, 0, 0, 0.966), rgba(35, 62, 87, 0.994)), url("{% static 'images/wallet.png' %}");
                     background-position: bottom;
                     background-size: cover;
                 }
@@ -77,7 +76,7 @@
     <header class="container" id="header">
         <nav class="nav">
             <div class="logo">
-                <a href="/"><img src="{% static 'Img/logo.png' %}" alt="Logo"></a> 
+                <a href="/"><img src="{% static 'images/logo.png' %}" alt="Logo"></a> 
                 <a href="/"><h2>Top-Choice Bank</h2></a>
             </div>
 
@@ -123,22 +122,22 @@
 
         <div class="content1">
             <div class="content1-row">
-                <img src="{% static 'Img/wallet.png' %}" alt="wallet-balance-img">
+                <img src="{% static 'images/wallet.png' %}" alt="wallet-balance-img">
                 <h3>BALANCE</h3>
                 <p>As an account owner of Top-Choice bank, you get to check your account balance at any given point in time.</p>
             </div>
             <div class="content1-row">
-                <img src="{% static 'Img/deposit.png' %}" alt="deposit-img">
+                <img src="{% static 'images/deposit.png' %}" alt="deposit-img">
                 <h3>DEPOSIT</h3>
                 <p>As an account owner of Top-Choice bank, you get to deposit money into your account at any given point in time.</p>
             </div>
             <div class="content1-row">
-                <img src="{% static 'Img/withdraw.png' %}" alt="withdraw-img">
+                <img src="{% static 'images/withdraw.png' %}" alt="withdraw-img">
                 <h3>WITHDRAW</h3>
                 <p>As an account owner of Top-Choice bank, you get to withdraw money from your account at any given point in time.</p>
             </div>
             <div class="content1-row">
-                <img src="{% static 'Img/transfer.png' %}" alt="transfer-img">
+                <img src="{% static 'images/transfer.png' %}" alt="transfer-img">
                 <h3>TRANSFER</h3>
                 <p>As an account owner of Top-Choice bank, you get to transfer money from your account to at any given point in time.</p>
             </div>
@@ -154,13 +153,13 @@
 
         <div class="content2">
             <div class="content2-row">
-                <img src="{% static 'Img/247.png' %}" alt="247-img">
+                <img src="{% static 'images/247.png' %}" alt="247-img">
                 <h3>24/7 SERVICE</h3>
                 <p>Here at Top-Choice Bank, we provide 24/7 services to our clients and customers, and so they can count on us.</p>
             </div>
 
             <div class="content2-row">
-                <img src="{% static 'Img/faster-transactions.png' %}" alt="faster-transactions-img">
+                <img src="{% static 'images/faster-transactions.png' %}" alt="faster-transactions-img">
                 <h3>FASTER TRANSACTIONS</h3>
                 <p>Here at Top-Choice Bank, we make sure transaction are fast and seamless to our clients and customers.</p>
             </div>
@@ -199,7 +198,7 @@
 
     <footer>
         <div class="footer-logo">
-            <img src="{% static 'Img/logo.png' %}" alt="logo" class="logo-img">
+            <img src="{% static 'images/logo.png' %}" alt="logo" class="logo-img">
             <p>TOP-CHOICE BANK</p>
         </div>
 
@@ -231,7 +230,7 @@
 
 
 
-    <script src="{% static 'scripts/app.js' %}"></script>
+    <script src="{% static 'js/app.js' %}"></script>
 
 </body>
 </html>

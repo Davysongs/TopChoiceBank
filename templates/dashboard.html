@@ -7,16 +7,16 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Top-Choice Bank || Dashboard</title>
     
-    <link rel="stylesheet" href="{% static 'CSS/dashboard.css' %}">
+    <link rel="stylesheet" href="{% static 'css/dashboard.css' %}">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.1.2/css/all.min.css">
-    <link rel="icon" href="{% static 'Img/topicon.png' %}">
+    <link rel="icon" href="{% static 'images/topicon.png' %}">
 </head>
 <body>
     <div class="container" id="top">
         <nav class="dash-nav">
             <ul>
                 <li><a href="{% url 'home' %}" class="dash-logo">
-                    <img src="{% static 'Img/logo.png' %}" alt="myLogo">
+                    <img src="{% static 'Images/logo.png' %}" alt="myLogo">
                     <span class="nav-item">TOP-CHOICE BANK</span>
                 </a></li>
                 
@@ -63,7 +63,7 @@
                         {% if context.image %}
                         <img src="{{ context.image.url }}" alt="Profile"/>
                         {% else %}
-                        <img src="{% static 'img/icon.jpg' %}" alt="Profile"/>
+                        <img src="{% static 'images/icon.jpg' %}" alt="Profile"/>
                         {% endif %}
                     </div>
                 </a>
@@ -172,7 +172,7 @@
 
 
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
-    <script src="{% static 'scripts/dashboard.js' %}"></script>
+    <script src="{% static 'js/dashboard.js' %}"></script>
 
     {{ redirect_to_login_immediately }}
 </body>

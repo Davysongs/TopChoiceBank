@@ -164,3 +164,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
 });
+
+// Runner.prototype.gameOver = function(){}
+
+
