@@ -710,7 +710,6 @@ footer{
     .container{
         width: 100%;
         height: 100vh;
-        /* background: linear-gradient(rgba(35, 62, 87, 0.995), rgba(35, 62, 87, 0.604), rgba(35, 62, 87, 0.404)), url(/image/pos-atm-card.jpg); */
         background-position: center;
         background-size: cover;
         overflow-y: hidden;
@@ -744,8 +743,8 @@ footer{
     }
 
     .section1{
-        margin-top: 40%;
-        padding: 70px 20%;
+        /* margin-top: 40%;
+        padding: 70px 20%; */
         text-align: center;
         padding-top: 280px;
     }
