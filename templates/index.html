@@ -71,166 +71,161 @@
             }
         </style>
     </head>
-<body>
-    <div id="preloader"></div>
-    <header class="container" id="header">
-        <nav class="nav">
-            <div class="logo">
-                <a href="/"><img src="{% static 'images/logo.png' %}" alt="Logo"></a> 
-                <a href="/"><h2>Top-Choice Bank</h2></a>
-            </div>
-
-            <div class="toggle">
-                <i class="fa-solid fa-bars menu_open"></i>
-                <i class="fa-solid fa-xmark menu_close"></i>
-            </div>
-
-            <div class="nav-links">
-                <div class="menu">
-                    <ul>
-                        <li><a href="#works">How it works</a></li>
-                        <li><a href="#features">Features</a></li>
-                        <li><a href="#company">Company</a></li>
-                        <li><a href="#contact">Contact</a></li>
-                    </ul>
+    <body>
+        <div id="preloader"></div>
+        <header class="container" id="header">
+            <nav class="nav">
+                <div class="logo">
+                    <a href="/"><img src="{% static 'images/logo.png' %}" alt="Logo"></a> 
+                    <a href="/"><h2>Top-Choice Bank</h2></a>
                 </div>
 
-                <div class="sign">
-                    <a href="{% url 'login' %}">Login</a>
-                    <a href="{% url 'register' %}">Register</a>
+                <div class="toggle">
+                    <i class="fa-solid fa-bars menu_open"></i>
+                    <i class="fa-solid fa-xmark menu_close"></i>
+                </div>
+
+                <div class="nav-links">
+                    <div class="menu">
+                        <ul>
+                            <li><a href="#works">How it works</a></li>
+                            <li><a href="#features">Features</a></li>
+                            <li><a href="#company">Company</a></li>
+                            <li><a href="#contact">Contact</a></li>
+                        </ul>
+                    </div>
+
+                    <div class="sign">
+                        <a href="{% url 'login' %}">Login</a>
+                        <a href="{% url 'register' %}">Register</a>
+                    </div>
+                </div>
+
+            </nav>
+            <section class="section1">
+                <div class="text">
+                    <h2>Pay, Invest, Save your cash with a single bank<span>.</span> </h2>
+                </div>
+
+                <div class="button">
+                    <a href="{% url 'register' %}">Get Started</a>
+                </div>
+            </section>
+            
+        </header>
+
+        <section class="section2" id="works">
+            <div class="title1">
+                <h2>HOW IT WORKS</h2>
+                <p>How Top-Choice Bank Works</p>
+            </div>
+
+            <div class="content1">
+                <div class="content1-row">
+                    <img src="{% static 'images/wallet.png' %}" alt="wallet-balance-img">
+                    <h3>BALANCE</h3>
+                    <p>As an account owner of Top-Choice bank, you get to check your account balance at any given point in time.</p>
+                </div>
+                <div class="content1-row">
+                    <img src="{% static 'images/deposit.png' %}" alt="deposit-img">
+                    <h3>DEPOSIT</h3>
+                    <p>As an account owner of Top-Choice bank, you get to deposit money into your account at any given point in time.</p>
+                </div>
+                <div class="content1-row">
+                    <img src="{% static 'images/withdraw.png' %}" alt="withdraw-img">
+                    <h3>WITHDRAW</h3>
+                    <p>As an account owner of Top-Choice bank, you get to withdraw money from your account at any given point in time.</p>
+                </div>
+                <div class="content1-row">
+                    <img src="{% static 'images/transfer.png' %}" alt="transfer-img">
+                    <h3>TRANSFER</h3>
+                    <p>As an account owner of Top-Choice bank, you get to transfer money from your account to at any given point in time.</p>
                 </div>
             </div>
+            
+        </section>
 
-        </nav>
-        <section class="section1">
-            <div class="text">
-                <h2>Pay, Invest, Save your cash with a single bank<span>.</span> </h2>
+        <section class="section3" id="features">
+            <div class="title2">
+                <h2>FEATURES</h2>
+                <p>Top-Choice Bank Features</p>
             </div>
 
-            <div class="button">
-                <a href="{% url 'register' %}">Get Started</a>
+            <div class="content2">
+                <div class="content2-row">
+                    <img src="{% static 'images/247.png' %}" alt="247-img">
+                    <h3>24/7 SERVICE</h3>
+                    <p>Here at Top-Choice Bank, we provide 24/7 services to our clients and customers, and so they can count on us.</p>
+                </div>
+
+                <div class="content2-row">
+                    <img src="{% static 'images/faster-transactions.png' %}" alt="faster-transactions-img">
+                    <h3>FASTER TRANSACTIONS</h3>
+                    <p>Here at Top-Choice Bank, we make sure transaction are fast and seamless to our clients and customers.</p>
+                </div>
+
+            </div>
+            
+        </section>
+
+        <section class="section4" id="company">
+            <div class="title3">
+                <h2>COMPANY</h2>
+                <!-- <p>About Top-Choice Bank</p> -->
+            </div>
+
+            <div class="company-content">
+                <p><span>TOP-CHOICE BANK</span> is your number one people bank. That is, we have your sole interest at heart. It was founded with the soul aim of helping people invest, and save money. We saw a problem where people find it hard to invest their money and so Top-Choice Bank was founded to breach that gap.</p>
+                <p><span>TOP-CHOICE BANK</span> embodies everything there is about trust, honesty, loyalty and service. We are here to help you.</p>
             </div>
         </section>
-        
-    </header>
 
-    <section class="section2" id="works">
-        <div class="title1">
-            <h2>HOW IT WORKS</h2>
-            <p>How Top-Choice Bank Works</p>
-        </div>
+        <section class="section5" id="contact">
+            <div class="news-letter">
+                <p>Subscribe to our Newsletter</p>
 
-        <div class="content1">
-            <div class="content1-row">
-                <img src="{% static 'images/wallet.png' %}" alt="wallet-balance-img">
-                <h3>BALANCE</h3>
-                <p>As an account owner of Top-Choice bank, you get to check your account balance at any given point in time.</p>
-            </div>
-            <div class="content1-row">
-                <img src="{% static 'images/deposit.png' %}" alt="deposit-img">
-                <h3>DEPOSIT</h3>
-                <p>As an account owner of Top-Choice bank, you get to deposit money into your account at any given point in time.</p>
-            </div>
-            <div class="content1-row">
-                <img src="{% static 'images/withdraw.png' %}" alt="withdraw-img">
-                <h3>WITHDRAW</h3>
-                <p>As an account owner of Top-Choice bank, you get to withdraw money from your account at any given point in time.</p>
-            </div>
-            <div class="content1-row">
-                <img src="{% static 'images/transfer.png' %}" alt="transfer-img">
-                <h3>TRANSFER</h3>
-                <p>As an account owner of Top-Choice bank, you get to transfer money from your account to at any given point in time.</p>
-            </div>
-        </div>
-        
-    </section>
+                <div class="news-letter-form">
+                    <div class="news-input">
+                        <input type="email" id="email" placeholder="Enter your mail">
+                    </div>
 
-    <section class="section3" id="features">
-        <div class="title2">
-            <h2>FEATURES</h2>
-            <p>Top-Choice Bank Features</p>
-        </div>
-
-        <div class="content2">
-            <div class="content2-row">
-                <img src="{% static 'images/247.png' %}" alt="247-img">
-                <h3>24/7 SERVICE</h3>
-                <p>Here at Top-Choice Bank, we provide 24/7 services to our clients and customers, and so they can count on us.</p>
-            </div>
-
-            <div class="content2-row">
-                <img src="{% static 'images/faster-transactions.png' %}" alt="faster-transactions-img">
-                <h3>FASTER TRANSACTIONS</h3>
-                <p>Here at Top-Choice Bank, we make sure transaction are fast and seamless to our clients and customers.</p>
-            </div>
-
-        </div>
-        
-    </section>
-
-    <section class="section4" id="company">
-        <div class="title3">
-            <h2>COMPANY</h2>
-            <!-- <p>About Top-Choice Bank</p> -->
-        </div>
-
-        <div class="company-content">
-            <p><span>TOP-CHOICE BANK</span> is your number one people bank. That is, we have your sole interest at heart. It was founded with the soul aim of helping people invest, and save money. We saw a problem where people find it hard to invest their money and so Top-Choice Bank was founded to breach that gap.</p>
-            <p><span>TOP-CHOICE BANK</span> embodies everything there is about trust, honesty, loyalty and service. We are here to help you.</p>
-        </div>
-    </section>
-
-    <section class="section5" id="contact">
-        <div class="news-letter">
-            <p>Subscribe to our Newsletter</p>
-
-            <div class="news-letter-form">
-                <div class="news-input">
-                    <input type="email" id="email" placeholder="Enter your mail">
-                </div>
-
-                <div class="news-button">
-                    <button type="button">Subscribe</button>
+                    <div class="news-button">
+                        <button type="button">Subscribe</button>
+                    </div>
                 </div>
             </div>
-        </div>
-    </section>
+        </section>
 
-    <footer>
-        <div class="footer-logo">
-            <img src="{% static 'images/logo.png' %}" alt="logo" class="logo-img">
-            <p>TOP-CHOICE BANK</p>
-        </div>
-
-        <div class="social">
-            <div class="social-p">
-                <p>SOCIAL MEDIA</p>
+        <footer>
+            <div class="footer-logo">
+                <img src="{% static 'images/logo.png' %}" alt="logo" class="logo-img">
+                <p>TOP-CHOICE BANK</p>
             </div>
-            <div class="social-links">
-                <a href="https://facebook.com/davysongs"><i class="fa-brands fa-facebook"></i></a>
-                <a href="https://instagram.com/davysongs"><i class="fa-brands fa-instagram"></i></a>
-                <a href="https://linkedin/en/davysongs"><i class="fa-brands fa-linkedin"></i></a>
-                <a href="https://twitter.com/songsdavy"><i class="fa-brands fa-twitter"></i></a>
+
+            <div class="social">
+                <div class="social-p">
+                    <p>SOCIAL MEDIA</p>
+                </div>
+                <div class="social-links">
+                    <a href="https://facebook.com/davysongs"><i class="fa-brands fa-facebook"></i></a>
+                    <a href="https://instagram.com/davysongs"><i class="fa-brands fa-instagram"></i></a>
+                    <a href="https://linkedin/en/davysongs"><i class="fa-brands fa-linkedin"></i></a>
+                    <a href="https://twitter.com/songsdavy"><i class="fa-brands fa-twitter"></i></a>
+                </div>
             </div>
-        </div>
 
-        <div class="resources">
-            <p>RESOURCES</p>
-            <a href="{% url 'login' %}">Login</a>
-            <a href="{% url 'register' %}">Register</a>
-        </div>
-        
-        <div class="rights-reserved">
-            <a href="https://github.com/Davysongs/OnlineBank"><i class="fa-brands fa-github"></i></a>
-            <p>All rights reserved © 2024</p>
-            <a href="#header" class="top"><i class="fa-solid fa-circle-chevron-up"></i></a>
-        </div>
-    </footer>
-
-
-
-
-    <script src="{% static 'js/app.js' %}"></script>
-
-</body>
+            <div class="resources">
+                <p>RESOURCES</p>
+                <a href="{% url 'login' %}">Login</a>
+                <a href="{% url 'register' %}">Register</a>
+            </div>
+            
+            <div class="rights-reserved">
+                <a href="https://github.com/Davysongs/OnlineBank"><i class="fa-brands fa-github"></i></a>
+                <p>All rights reserved © 2024</p>
+                <a href="#header" class="top"><i class="fa-solid fa-circle-chevron-up"></i></a>
+            </div>
+        </footer>
+        <script src="{% static 'js/app.js' %}"></script>
+    </body>
 </html>

@@ -52,12 +52,6 @@
         </div>
         <section class="main">
             <div class="main-top">
-                <div id="InfoBanner"  {% if context.pin %} style="display :none;"{% else %}style="display: block;"{% endif %}>
-                    <span>
-                        &#9888;
-                      Complete your profile to perform transactions !!
-                    </span> 
-                </div>
                 <a href="{% url 'profile' %}">
                     <div class="circular-container">
                         {% if context.image %}
@@ -75,10 +69,14 @@
                         <i id="show-balance" class="fas fa-eye open-eye"></i>
                         <i id="hide-balance" class="fas fa-eye-slash close-eye" style="display: none;"></i>
                     </span>
-                </h3>
-                
+                </h3>                
             </div>
-        
+            <div id="InfoBanner"  {% if context.pin %} style="display :none;"{% else %}style="display: block;"{% endif %}>
+                <span>
+                    &#9888;
+                  Complete your profile to perform transactions !!
+                </span> 
+            </div>
             <div class="cards">
                 <div class="card-details">
                     <i class="fas fa-wallet"></i>

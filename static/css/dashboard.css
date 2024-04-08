@@ -341,56 +341,6 @@ nav .fas{
     margin-bottom: 40px;
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 /* MEDIA QUERY */
 @media (max-width: 1024px){
 nav{
@@ -1712,28 +1662,16 @@ nav{
   
 #InfoBanner{
     margin-bottom: 10px;
-    position: absolute;
+    position: relative;
     left: -15px;
-    top: 115px;
     text-align: center;
     width: 100%;
-    background-color:#ef5350;
-    background-image: linear-gradient(
-      45deg,
-      #e57373 25%,
-      transparent 25%,
-      transparent 75%,
-      #e57373 75%,
-      #e57373
-    ),linear-gradient(
-      -45deg,
-      #e57373 25%,
-      transparent 25%,
-      transparent 75%,
-      #e57373 75%,
-      #e57373
-    );
+    background-color:#ffffff;
     background-size: 60px 60px;
-    animation: slide 4s infinite linear;
-  }
+    border-radius: 20px;
+    display: flex;
+}
+#InfoBanner span{
+    color:rgb(255, 0, 0);
+}
   
