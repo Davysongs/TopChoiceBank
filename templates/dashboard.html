@@ -99,10 +99,12 @@
 
                     <div class="popup" id="popup-transfer">
                         <i class="fas fa-times cancel-pop2"></i>
-                        <input type="number" name="transfer" id="transfer-amount" placeholder="Amount to Transfer"> <br>
+                        <form action="/transaction/add/" method="post">
+                            <input type="number" name="transfer" id="transfer-amount" placeholder="Amount to Transfer"> <br>
 
-                        <input type="name" name="transfer-name" id="transfer-name" placeholder="To (Name of the receiver)"> <br>
+                        <input type="name" name="transfer-name" id="transfer-name" placeholder="To: (account no of reciever)"> <br>
                         <button type="button" id="close-transfer-popup">Transfer</button>
+                        </form>
                     </div>
                 </div>
 
