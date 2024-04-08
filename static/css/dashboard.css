@@ -294,7 +294,9 @@ nav .fas{
     visibility: visible;
     top: 50%;
     transform: translate(-20%, -50%) scale(1);
+    height: fit-content;
 }
+
 
 
 .popup p{
@@ -718,6 +720,7 @@ nav{
 .open-popup{
     visibility: visible;
     top: 50%;
+    height:fit-content;
     transform: translate(-50%, -50%) scale(1);
 }
 
@@ -1182,6 +1185,7 @@ nav{
     visibility: visible;
     top: 18%;
     transform: translate(-50%, -60%) scale(1);
+    height: fit-content;
 }
 }
 
@@ -1336,6 +1340,7 @@ nav{
     visibility: visible;
     top: 18%;
     transform: translate(-50%, -60%) scale(1);
+    height: fit-content;
 }
 }
 
@@ -1494,6 +1499,7 @@ nav{
     visibility: visible;
     top: 18%;
     transform: translate(-50%, -50%) scale(1);
+    height: fit-content;
 }
 }
 
@@ -1657,6 +1663,7 @@ nav{
     visibility: visible;
     top: 18%;
     transform: translate(-50%, -50%) scale(1);
+    height: fit-content;
 }
 }
   

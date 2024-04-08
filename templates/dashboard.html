@@ -99,17 +99,13 @@
 
                     <div class="popup" id="popup-transfer">
                         <i class="fas fa-times cancel-pop2"></i>
-                        <form action="/transaction/add/" method="post">
+                        <span>Bal: {{ context.balance }} </span><br/>
                             <input type="number" name="transfer" id="transfer-amount" placeholder="Amount to Transfer"> <br>
-
-                        <input type="name" name="transfer-name" id="transfer-name" placeholder="To: (account no of reciever)"> <br>
-                        <button type="button" id="close-transfer-popup">Transfer</button>
-                        </form>
+                            <input type="name" name="transfer-name" id="transfer-name" placeholder="To: (account no of reciever)"> <br>
+                            <input type="text" name="pin" maxlength="4" minlength="4" id="pin" placeholder="PIN"> <br>
+                            <button type="button" id="close-transfer-popup">Transfer</button>
                     </div>
                 </div>
-
-            
-
                 <div class="card-details">
                     <i class="fas fa-money-check-alt"></i>
                     <h2>Deposit</h2>

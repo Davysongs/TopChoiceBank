@@ -872,7 +872,7 @@ form button{
 }
 
 .input .input-granted{
-    color: --hover-color;
+    color: green;
     font-size: 14px;
     position: absolute;
     bottom: 3%;
@@ -1014,7 +1014,7 @@ form button{
 }
 
 .input .input-granted{
-    color: --hover-color;
+    color: green;
     font-size: 14px;
     position: absolute;
     bottom: 3%;
@@ -1073,7 +1073,7 @@ form button{
         
         .icon-line {
             height: 5px;
-            background-color: --hover-color;
+            background-color: rgb(12, 156, 82);
             display: block;
             border-radius: 2px;
             position: absolute;

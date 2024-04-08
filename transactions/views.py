@@ -1,6 +1,5 @@
 from accounts.models import Account
 from django.shortcuts import render,redirect
-from login_required import login_not_required
 from django.http import JsonResponse
 import json
 from Base.middlewares import CustomException
@@ -46,9 +45,6 @@ def withdraw(request):
     pass
 def transfer(request):
     pass
-
-
-# Create your views here.
 
 def dashboard(request):
     if request.method == "GET":
