@@ -27,7 +27,7 @@ class Account(models.Model):
             self.pin = make_password(self.pin)
         super().save(*args, **kwargs)
     
-    def generate_account_no():
+    def generate_account_no(self):
         while True:
             account_no = str(uuid.uuid4().int)[:10]  # Generate a UUID and extract the first 10 digits
             if not Account.objects.filter(account_no=account_no).exists():
