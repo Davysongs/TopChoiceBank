@@ -26,7 +26,7 @@
     background-color:var(--background) ;
     background-position: top;
     background-size: cover;
-    overflow-y: hidden;
+    overflow-y: auto;
 }
 
 nav{
@@ -154,7 +154,7 @@ nav:hover .logo h2{
 
 form{
     width: 380px;
-    height: 80vh;
+    height: fit-content;
     display: block;
     justify-content: center;
     background-color: var(--white-color);
@@ -349,53 +349,6 @@ form button:hover{
     border-radius: 50px;
     border: 2px solid var(--hover-color);
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 /* MEDIA QUERY FOR MAX WIDTH OF 915PX */
 
 @media (max-width: 915px) {
@@ -526,7 +479,7 @@ nav:hover .logo h2{
 
 form{
     width: 400px;
-    height: 80vh;
+    height: fit-content;
     display: block;
     justify-content: center;
     margin: 50px auto;
@@ -642,7 +595,7 @@ form button{
 @media (max-width: 415px){
     form{
     width: 330px;
-    height: 82vh;
+    height: fit-content;
     display: block;
     justify-content: center;
     margin: 50px auto;
@@ -753,7 +706,7 @@ form label{
 @media (max-width: 380px){
     form{
     width: 300px;
-    height: 85vh;
+    height: fit-content;
     display: block;
     overflow-y: auto;
     justify-content: center;
@@ -907,7 +860,7 @@ form button{
 @media (max-width: 280px){
     form{
     width: 250px;
-    height: 90vh;
+    height: fit-content;
     display: block;
     justify-content: center;
     margin: 50px auto;
