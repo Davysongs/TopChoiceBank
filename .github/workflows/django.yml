@@ -14,20 +14,6 @@ jobs:
       matrix:
         python-version: [3.12.0]
 
-    env:
-      SECRET_KEY: ${{ secrets.SECRET_KEY }}
-      DATABASE_ENGINE: ${{ secrets.DATABASE_ENGINE }}
-      DATABASE_NAME: ${{ secrets.DATABASE_NAME }}
-      DATABASE_USER: ${{ secrets.DATABASE_USER }}
-      DATABASE_PASSWORD: ${{ secrets.DATABASE_PASSWORD }}
-      DATABASE_HOST: ${{ secrets.DATABASE_HOST }}
-      DATABASE_PORT: ${{ secrets.DATABASE_PORT }}
-      EMAIL_HOST: ${{ secrets.EMAIL_HOST }}
-      EMAIL_PORT: ${{ secrets.EMAIL_PORT }}
-      EMAIL_HOST_USER: ${{ secrets.EMAIL_HOST_USER }}
-      EMAIL_HOST_PASSWORD: ${{ secrets.EMAIL_HOST_PASSWORD }}
-      DEFAULT_FROM_EMAIL: ${{ secrets.DEFAULT_FROM_EMAIL }}
-
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
