@@ -2,3 +2,5 @@
 .env
 Pipfile.lock
 /staticfiles_build/
+/venv
+db.sqlite
