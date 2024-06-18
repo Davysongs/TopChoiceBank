@@ -25,13 +25,15 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'phonenumber_field',
     'accounts',
+    'core',
     'transactions',
-    'custom_user.apps.CustomUserConfig',
-    'django_use_email_as_username.apps.DjangoUseEmailAsUsernameConfig'
+    'user.apps.CustomUserConfig',
+    'django_use_email_as_username.apps.DjangoUseEmailAsUsernameConfig',
 ]
 
-AUTH_USER_MODEL = 'custom_user.User'
+AUTH_USER_MODEL = 'user.User'
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
@@ -42,9 +44,9 @@ MIDDLEWARE = [
     'login_required.middleware.LoginRequiredMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    'Base.middlewares.CustomErrorHandlerMiddleware',
-    'Base.middlewares.AuthenticatedRedirectMiddleware',
-    'Base.middlewares.AjaxMiddleware',
+    'core.middlewares.CustomErrorHandlerMiddleware',
+    'core.middlewares.AuthenticatedRedirectMiddleware',
+    'core.middlewares.AjaxMiddleware',
     'django_auto_logout.middleware.auto_logout',
 ]
 
@@ -77,12 +79,8 @@ WSGI_APPLICATION = 'Base.wsgi.application'
 
 DATABASES = {
    'default': {
-       'ENGINE': os.getenv('DATABASE_ENGINE'),
-       'NAME': os.getenv('DATABASE_NAME'),
-       'USER':os.getenv('DATABASE_USER'),
-       'PASSWORD': os.getenv('DATABASE_PASSWORD'),
-       'HOST':os.getenv('DATABASE_HOST'),
-       'PORT':os.getenv('DATABASE_PORT'),
+       'ENGINE':'django.db.backends.sqlite3',
+       'NAME': os.path.join(BASE_DIR, 'db.sqlite3'),
    }
 }
 
@@ -145,6 +143,10 @@ LOGIN_REDIRECT_URL='dashboard'
 LOGIN_URL = "login"
 LOGOUT_URL = "logout"
 
+# Phone number field settings
+PHONENUMBER_DEFAULT_REGION = "NG"
+PHONENUMBER_DB_FORMAT = "E164"
+PHONENUMBER_DEFAULT_FORMAT = "E164"
 
 #email stuff
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'

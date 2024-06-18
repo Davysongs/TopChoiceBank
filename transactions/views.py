@@ -2,7 +2,7 @@ from accounts.models import Account
 from django.shortcuts import render,redirect
 from django.http import JsonResponse
 import json
-from Base.middlewares import CustomException
+from core.middlewares import CustomException
 # Create your views here.
 def deposit(request):
     if request.method == "POST" and request.is_ajax():

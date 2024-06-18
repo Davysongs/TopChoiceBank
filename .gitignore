@@ -3,4 +3,4 @@
 Pipfile.lock
 /staticfiles_build/
 /venv
-db.sqlite
+db.sqlite3

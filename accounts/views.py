@@ -4,10 +4,10 @@ from django.contrib import messages
 from login_required import login_not_required
 from accounts.forms import SignUpForm
 from .forms import UserForm
-from Base.middlewares import CustomException
+from core.middlewares import CustomException
 from accounts.models import Account
 from django.http import JsonResponse
-from custom_user.models import User
+from user.models import User
 from django.views import View
 from django.urls import reverse
 from django.core.mail import EmailMessage
