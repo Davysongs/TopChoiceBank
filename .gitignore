@@ -4,19 +4,10 @@ Pipfile.lock
 /staticfiles_build/
 /venv
 db.sqlite3
-# Ignore Python bytecode files
 *.pyc
-
-# Ignore __pycache__ directories
 **/__pycache__/
-
-# Ignore environment folders
 env/
 venv/
-
-# Ignore other system files
 .DS_Store
 Thumbs.db
-
-# Ignore log files
 *.log
