@@ -35,6 +35,6 @@ jobs:
 
     - name: Run Tests
       env:
-        DJANGO_SETTINGS_MODULE: Base.settings
+        DJANGO_SETTINGS_MODULE: base.settings
       run: |
         python manage.py test
