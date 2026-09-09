@@ -1,6 +1,9 @@
 /media/
 /.env
-.env.*
+# Keep sample env files in source control
+!.env.example
+.env.local
+.env.*.local
 Pipfile.lock
 /staticfiles_build/
 /venv
