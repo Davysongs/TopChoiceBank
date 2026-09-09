@@ -12,10 +12,10 @@ const (
 	defaultAPIHost                  = "0.0.0.0"
 	defaultAPIPort                  = "8080"
 	defaultLogLevel                 = "info"
-	defaultShutdownTimeoutInSeconds  = 10
-	defaultDatabaseMaxOpenConns      = 25
-	defaultDatabaseMaxIdleConns      = 5
-	defaultDatabaseConnLifetime      = 5 * time.Minute
+	defaultShutdownTimeoutInSeconds = 10
+	defaultDatabaseMaxOpenConns     = 25
+	defaultDatabaseMaxIdleConns     = 5
+	defaultDatabaseConnLifetime     = 5 * time.Minute
 )
 
 type Config struct {
@@ -75,4 +75,3 @@ func getInt(key string, fallback int) int {
 	}
 	return parsed
 }
-

@@ -22,7 +22,7 @@ func RequestIDMiddleware() Middleware {
 				requestID = generateRequestID()
 				req.Header.Set("X-Request-ID", requestID)
 			}
-			ctx := req.Context().WithValue(requestIDKey, requestID)
+			ctx := context.WithValue(req.Context(), requestIDKey, requestID)
 			next.ServeHTTP(writer, req.WithContext(ctx))
 			writer.Header().Set("X-Request-ID", requestID)
 		})
@@ -89,4 +89,3 @@ func (w *statusResponseWriter) Write(payload []byte) (int, error) {
 	w.written += n
 	return n, err
 }
-

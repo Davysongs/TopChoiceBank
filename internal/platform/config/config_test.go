@@ -25,4 +25,3 @@ func TestLoad_DefaultsAndRequiredValues(t *testing.T) {
 		t.Fatal("database url should not be empty")
 	}
 }
-

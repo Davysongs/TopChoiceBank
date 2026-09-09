@@ -61,4 +61,3 @@ func healthHandler() http.HandlerFunc {
 		_ = json.NewEncoder(writer).Encode(payload)
 	}
 }
-

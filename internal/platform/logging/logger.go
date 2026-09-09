@@ -59,4 +59,3 @@ func (l *Logger) Error(message string, err error, args ...any) {
 	merged := append([]any{"error", err}, args...)
 	l.logger.Error(message, merged...)
 }
-

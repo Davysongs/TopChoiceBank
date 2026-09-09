@@ -13,11 +13,10 @@ func Run(ctx context.Context, address string, handler http.Handler, shutdownTime
 	server := &http.Server{
 		Addr:              address,
 		Handler:           handler,
-		ReadHeaderTimeout:  5 * time.Second,
+		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,
 		WriteTimeout:      15 * time.Second,
 		IdleTimeout:       60 * time.Second,
-		DisableKeepAlives: false,
 	}
 
 	errCh := make(chan error, 1)
@@ -48,4 +47,3 @@ func Run(ctx context.Context, address string, handler http.Handler, shutdownTime
 		return nil
 	}
 }
-
