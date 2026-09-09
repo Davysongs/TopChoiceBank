@@ -4,13 +4,14 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"time"
 )
 
 type Config struct {
 	DSN             string
 	MaxOpenConns    int
 	MaxIdleConns    int
-	ConnMaxLifetime int
+	ConnMaxLifetime time.Duration
 }
 
 func NewPool(cfg Config) (*sql.DB, error) {
@@ -30,7 +31,7 @@ func NewPool(cfg Config) (*sql.DB, error) {
 		db.SetMaxIdleConns(cfg.MaxIdleConns)
 	}
 	if cfg.ConnMaxLifetime > 0 {
-		db.SetConnMaxLifetime(int64(cfg.ConnMaxLifetime))
+		db.SetConnMaxLifetime(cfg.ConnMaxLifetime)
 	}
 
 	return db, nil
@@ -42,4 +43,3 @@ func Shutdown(_ context.Context, db *sql.DB) error {
 	}
 	return db.Close()
 }
-

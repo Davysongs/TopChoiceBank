@@ -5,7 +5,6 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	"github.com/Davysongs/TopChoiceBank/internal/platform/config"
 	"github.com/Davysongs/TopChoiceBank/internal/platform/logging"
@@ -31,4 +30,3 @@ func main() {
 	<-shutdownCtx.Done()
 	logger.Info("worker process stopped")
 }
-

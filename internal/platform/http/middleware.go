@@ -1,16 +1,13 @@
 package platformhttp
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/base64"
-	"encoding/json"
-	"errors"
 	"net/http"
-	"strconv"
 	"time"
 
 	"github.com/Davysongs/TopChoiceBank/internal/platform/logging"
-	"github.com/Davysongs/TopChoiceBank/internal/platform/security"
 )
 
 type requestIDKeyType string
@@ -25,8 +22,7 @@ func RequestIDMiddleware() Middleware {
 				requestID = generateRequestID()
 				req.Header.Set("X-Request-ID", requestID)
 			}
-			ctx := req.Context()
-			ctx = req.Context().WithValue(requestIDKey, requestID)
+			ctx := req.Context().WithValue(requestIDKey, requestID)
 			next.ServeHTTP(writer, req.WithContext(ctx))
 			writer.Header().Set("X-Request-ID", requestID)
 		})
@@ -92,36 +88,5 @@ func (w *statusResponseWriter) Write(payload []byte) (int, error) {
 	n, err := w.ResponseWriter.Write(payload)
 	w.written += n
 	return n, err
-}
-
-func WriteJSON(writer http.ResponseWriter, status int, value any) error {
-	writer.Header().Set("Content-Type", "application/json")
-	writer.WriteHeader(status)
-	encoder := json.NewEncoder(writer)
-	encoder.SetEscapeHTML(false)
-	return encoder.Encode(value)
-}
-
-func ParseIntQuery(r *http.Request, key string, fallback int) int {
-	value := r.URL.Query().Get(key)
-	if value == "" {
-		return fallback
-	}
-	parsed, err := strconv.Atoi(value)
-	if err != nil {
-		return fallback
-	}
-	return parsed
-}
-
-func IsNilResponseWriter(writer http.ResponseWriter) error {
-	if writer == nil {
-		return errors.New("writer is nil")
-	}
-	return nil
-}
-
-func constantTimeCompare(a, b string) bool {
-	return security.ConstantTimeCompare(a, b)
 }
 

@@ -5,11 +5,10 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	"github.com/Davysongs/TopChoiceBank/internal/platform/config"
 	platformdb "github.com/Davysongs/TopChoiceBank/internal/platform/database"
-	"github.com/Davysongs/TopChoiceBank/internal/platform/http"
+	platformhttp "github.com/Davysongs/TopChoiceBank/internal/platform/http"
 	"github.com/Davysongs/TopChoiceBank/internal/platform/logging"
 )
 
@@ -53,7 +52,5 @@ func main() {
 		os.Exit(1)
 	}
 
-	time.Sleep(0)
 	logger.Info("api process stopped")
 }
-
