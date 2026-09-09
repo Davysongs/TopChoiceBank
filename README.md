@@ -1,75 +1,60 @@
-### Top Choice Bank Django Project
+TopChoiceBank v2
+=================
 
-Welcome to the Top Choice Bank Django project! This project aims to provide a robust banking application with various features and functions to meet the needs of our users. Below are the key features and functions of this Django project:
+TopChoiceBank v2 is a Go-based rewrite foundation for a simulated retail banking platform.
+It is intentionally limited to infrastructure today: a modular-monolith process baseline with REST/HTTP, lifecycle management, and clean observability entry points.
 
-#### Features
+This codebase is an engineering demonstration and is **not** real banking software.
 
-1. **User Authentication:**
-   - Users can sign up for an account and log in securely.
-   - Authentication features include password hashing and session management.
+## Current scope
 
-2. **Account Management:**
-   - Users can create multiple bank accounts (e.g., savings, checking).
-   - Account details such as balance, transaction history, and account type are displayed.
+- API process bootstrap (`cmd/api`)
+- Worker process bootstrap (`cmd/worker`)
+- Scheduler process bootstrap (`cmd/scheduler`)
+- Shared platform foundations in `internal/platform`:
+  - `config` for environment-driven settings
+  - `logging` structured log abstraction
+  - `http` router, middleware, health endpoint, graceful shutdown
+  - `database` connection configuration and lifecycle hooks
+  - `security` small cryptographic utility primitive
+- Repository tooling and operations:
+  - `Makefile`
+  - `Dockerfile`
+  - `compose.yaml`
+  - GitHub Actions CI workflow
+  - OpenAPI placeholder
+  - architecture and ADR documentation
 
-3. **Transaction Handling:**
-   - Users can perform various transactions, including deposits, withdrawals, and transfers between accounts.
-   - All transactions are logged with details such as transaction type, amount, and date/time.
+## Local setup
 
-4. **Admin Dashboard:**
-   - Administrators have access to a dashboard for managing user accounts, transactions, and system settings.
-   - Admins can view and edit user details, freeze accounts, and monitor transaction logs.
+1. Copy environment file: `cp .env.example .env`
+2. Build all process binaries: `make build`
+3. Run process:
+   - API: `make run-api`
+   - Worker: `make run-worker`
+   - Scheduler: `make run-scheduler`
 
-5. **Security Measures:**
-   - The application implements security measures such as password hashing, CSRF protection, and input validation to ensure user data integrity and confidentiality.
-   - Two-factor authentication (2FA) can be enabled for enhanced security.
+## Development commands
 
-6. **Email Notifications:**
-   - Users receive email notifications for important account activities, such as password changes, account freezes, and large transactions.
+- `make build`: `go build ./...`
+- `make test`: `go test ./...`
+- `make vet`: `go vet ./...`
+- `make fmt`: `gofmt -w` on all Go files
+- `make fmt-check`: CI-friendly formatting check
 
-#### Functions:
+## Technology direction
 
-1. **Sign Up:**
-   - New users can register for an account by providing their personal details and creating a secure password.
+- Go application services
+- PostgreSQL-oriented data access foundation
+- REST/OpenAPI layout
+- Modular monolith with separate runtime roles
+- Containerized deployment baseline
+- Integration and e2e testing structure prepared for future expansion
 
-2. **Log In:**
-   - Registered users can log in using their email address and password to access their accounts.
+## Implementation status
 
-3. **Account Creation:**
-   - Users can create different types of bank accounts based on their financial needs and goals.
+- ✅ Foundation scaffold in place
+- ✅ CI and local developer tooling in place
+- ⏳ No domain modules yet (accounts, ledger, transfers, etc.)
+- ⏳ No authentication, jobs, observability stack, or cloud deployment yet
 
-4. **Deposit:**
-   - Users can deposit funds into their accounts securely using various payment methods.
-
-5. **Withdrawal:**
-   - Users can withdraw money from their accounts either at the bank branch or through ATM machines.
-
-6. **Transfer:**
-   - Users can transfer money between their own accounts or to other users' accounts within the bank.
-
-7. **Transaction History:**
-   - Users can view a detailed transaction history, including deposits, withdrawals, and transfers.
-
-8. **Profile Management:**
-   - Users can update their personal information, change passwords, and manage account preferences.
-
-9. **Admin Controls:**
-   - Administrators have access to additional controls for managing user accounts, transactions, and system settings.
-
-10. **Security Settings:**
-    - Users can configure security settings such as enabling 2FA, setting up security questions, and updating contact information.
-
-### Getting Started
-
-To run the Top Choice Bank Django project locally, follow these steps:
-
-1. Clone the repository: `git clone https://github.com/top-choice-bank.git`
-2. Navigate to the project directory: `cd top-choice-bank`
-3. Install dependencies: `pip install -r requirements.txt`
-4. Run migrations: `python manage.py migrate`
-5. Create a superuser (admin): `python manage.py createsuperuser`
-6. Start the development server: `python manage.py runserver`
-
-You can now access the application at `http://localhost:8000` and log in with the superuser credentials to access the admin dashboard.
-
-Thank you for choosing Top Choice Bank! If you have any questions or feedback, please don't hesitate to contact us.

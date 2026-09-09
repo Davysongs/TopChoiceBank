@@ -1,0 +1,27 @@
+openapi: 3.0.3
+info:
+  title: TopChoiceBank v2
+  version: 0.0.0
+  description: Foundation API for TopChoiceBank v2
+paths:
+  /health:
+    get:
+      summary: Health check
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+  /healthz:
+    get:
+      summary: Health check
+      responses:
+        '200':
+          description: Service is healthy
+

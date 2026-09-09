@@ -1,0 +1,21 @@
+services:
+  api:
+    build: .
+    command: ["/app/api"]
+    env_file:
+      - .env.example
+    ports:
+      - "8080:8080"
+
+  worker:
+    build: .
+    command: ["/app/worker"]
+    env_file:
+      - .env.example
+
+  scheduler:
+    build: .
+    command: ["/app/scheduler"]
+    env_file:
+      - .env.example
+

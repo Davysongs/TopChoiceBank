@@ -1,5 +1,6 @@
 /media/
-.env
+/.env
+.env.*
 Pipfile.lock
 /staticfiles_build/
 /venv
@@ -11,3 +12,8 @@ venv/
 .DS_Store
 Thumbs.db
 *.log
+bin/
+dist/
+coverage.out
+*.out
+*.test
