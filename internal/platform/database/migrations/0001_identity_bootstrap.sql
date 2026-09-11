@@ -127,6 +127,8 @@ CREATE TABLE IF NOT EXISTS identity.security_events (
   request_id text,
   source_ip inet,
   device_id uuid REFERENCES identity.devices(id) ON DELETE SET NULL,
+  CONSTRAINT security_events_user_device_fk
+  FOREIGN KEY (user_id, device_id) REFERENCES identity.devices (user_id, id),
   metadata jsonb NOT NULL DEFAULT '{}'::jsonb
     CHECK (jsonb_typeof(metadata) = 'object'),
   occurred_at timestamptz NOT NULL DEFAULT clock_timestamp()

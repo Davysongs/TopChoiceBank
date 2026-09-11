@@ -1,5 +1,12 @@
 module github.com/Davysongs/TopChoiceBank
 
-go 1.27
+go 1.23.0
 
-require golang.org/x/crypto v0.57.0
+toolchain go1.24.13
+
+require (
+	github.com/lib/pq v1.10.9
+	golang.org/x/crypto v0.36.0
+)
+
+require golang.org/x/sys v0.31.0 // indirect

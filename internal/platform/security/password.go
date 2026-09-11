@@ -28,6 +28,16 @@ var DefaultPasswordHashParams = PasswordHashParams{
 	KeyLength:   32,
 }
 
+const (
+	minSaltLength        = 8
+	maxSaltLength        = 64
+	minHashLength        = 16
+	maxHashLength        = 64
+	maxArgon2MemoryKiB   = 1024 * 1024
+	maxArgon2Iterations  = 10
+	maxArgon2Parallelism = 32
+)
+
 func HashPassword(password string) (string, error) {
 	if password == "" {
 		return "", errors.New("password cannot be empty")
@@ -48,6 +58,9 @@ func VerifyPassword(password, encodedHash string) bool {
 
 	params, salt, expectedHash, ok := parseEncodedPasswordHash(encodedHash)
 	if !ok {
+		return false
+	}
+	if !isSafePasswordHash(params, salt, expectedHash) {
 		return false
 	}
 
@@ -109,6 +122,28 @@ func parseEncodedPasswordHash(encoded string) (PasswordHashParams, []byte, []byt
 		return PasswordHashParams{}, nil, nil, false
 	}
 	return params, salt, expected, true
+}
+
+func isSafePasswordHash(params PasswordHashParams, salt, expectedHash []byte) bool {
+	if params.Memory == 0 || params.Memory > maxArgon2MemoryKiB {
+		return false
+	}
+	if params.Iterations == 0 || params.Iterations > maxArgon2Iterations {
+		return false
+	}
+	if params.Parallelism == 0 || params.Parallelism > maxArgon2Parallelism {
+		return false
+	}
+	if params.KeyLength == 0 || params.KeyLength > maxHashLength {
+		return false
+	}
+	if uint32(len(expectedHash)) != params.KeyLength || len(expectedHash) < minHashLength {
+		return false
+	}
+	if len(salt) < minSaltLength || len(salt) > maxSaltLength {
+		return false
+	}
+	return true
 }
 
 func parsePasswordHashParams(encoded string) (PasswordHashParams, error) {

@@ -44,7 +44,7 @@ func applyMigrationsFromEmbeddedFiles(ctx context.Context, db *sql.DB, prefix st
 	sort.Strings(eligible)
 
 	for _, name := range eligible {
-		contents, readErr := fs.ReadFile(source, name)
+		contents, readErr := fs.ReadFile(source, "migrations/"+name)
 		if readErr != nil {
 			return readErr
 		}

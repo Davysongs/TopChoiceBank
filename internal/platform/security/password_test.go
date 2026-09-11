@@ -29,3 +29,17 @@ func TestHashPasswordRejectsEmptyPassword(t *testing.T) {
 		t.Fatal("HashPassword() expected error for empty password")
 	}
 }
+
+func TestVerifyPasswordRejectsUnsafeEncodedParams(t *testing.T) {
+	tests := []string{
+		"$argon2id$v=19$m=65536,t=3,p=0,k=32$c29tZXNhbHQ$YWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXoxMjM0NTY",
+		"$argon2id$v=19$m=2000000,t=3,p=2,k=32$c29tZXNhbHQ$YWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXoxMjM0NTY",
+		"$argon2id$v=19$m=65536,t=3,p=2,k=128$c29tZXNhbHQ$YWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXoxMjM0NTY",
+	}
+
+	for _, encoded := range tests {
+		if VerifyPassword("correct-horse-battery-staple", encoded) {
+			t.Fatalf("VerifyPassword() expected %q to be rejected", encoded)
+		}
+	}
+}
