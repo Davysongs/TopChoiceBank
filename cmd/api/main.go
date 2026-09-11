@@ -24,7 +24,7 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-		db, err := platformdb.NewPool(platformdb.Config{
+	db, err := platformdb.NewPool(platformdb.Config{
 		DSN:             cfg.DatabaseURL,
 		MaxOpenConns:    cfg.DatabaseMaxOpenConns,
 		MaxIdleConns:    cfg.DatabaseMaxIdleConns,
