@@ -31,6 +31,10 @@ func main() {
 		ConnMaxLifetime: cfg.DatabaseConnMaxLifetime,
 	})
 	if err != nil {
+		if cfg.DatabaseAutoMigrate {
+			logger.Error("database pool initialization failed and auto-migrate is enabled", "error", err)
+			os.Exit(1)
+		}
 		logger.Warn("database pool not initialized yet", "error", err)
 	} else {
 		if cfg.DatabaseAutoMigrate {
