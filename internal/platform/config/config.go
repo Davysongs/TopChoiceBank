@@ -25,6 +25,7 @@ type Config struct {
 	LogLevel                string
 	ShutdownTimeout         time.Duration
 	DatabaseURL             string
+	DatabaseAutoMigrate     bool
 	DatabaseMaxOpenConns    int
 	DatabaseMaxIdleConns    int
 	DatabaseConnMaxLifetime time.Duration
@@ -38,6 +39,7 @@ func Load() (Config, error) {
 		LogLevel:                strings.ToLower(getEnv("LOG_LEVEL", defaultLogLevel)),
 		ShutdownTimeout:         time.Duration(getInt("SHUTDOWN_TIMEOUT_SECONDS", defaultShutdownTimeoutInSeconds)) * time.Second,
 		DatabaseURL:             getEnv("DATABASE_URL", ""),
+		DatabaseAutoMigrate:     getBool("DATABASE_AUTO_MIGRATE"),
 		DatabaseMaxOpenConns:    getInt("DATABASE_MAX_OPEN_CONNS", defaultDatabaseMaxOpenConns),
 		DatabaseMaxIdleConns:    getInt("DATABASE_MAX_IDLE_CONNS", defaultDatabaseMaxIdleConns),
 		DatabaseConnMaxLifetime: time.Second * time.Duration(getInt("DATABASE_CONN_MAX_LIFETIME_SECONDS", int(defaultDatabaseConnLifetime.Seconds()))),
@@ -74,4 +76,14 @@ func getInt(key string, fallback int) int {
 		return fallback
 	}
 	return parsed
+}
+
+func getBool(key string) bool {
+	value := strings.ToLower(strings.TrimSpace(os.Getenv(key)))
+	switch value {
+	case "1", "t", "true", "yes", "on":
+		return true
+	default:
+		return false
+	}
 }

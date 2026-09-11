@@ -30,6 +30,12 @@ func main() {
 	if err != nil {
 		logger.Warn("database pool not initialized yet", "error", err)
 	} else {
+		if cfg.DatabaseAutoMigrate {
+			if err := platformdb.ApplyIdentityBootstrapMigrations(ctx, db); err != nil {
+				logger.Error("identity bootstrap migration failed", "error", err)
+				os.Exit(1)
+			}
+		}
 		defer platformdb.Shutdown(context.Background(), db)
 	}
 
