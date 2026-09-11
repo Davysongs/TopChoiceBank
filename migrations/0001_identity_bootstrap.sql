@@ -67,9 +67,11 @@ CREATE TABLE IF NOT EXISTS identity.devices (
   trusted_until timestamptz,
   first_seen_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   last_seen_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   last_ip inet,
   version bigint NOT NULL DEFAULT 1 CHECK (version > 0),
   UNIQUE (user_id, fingerprint_hash),
+  CONSTRAINT devices_user_composite_pk UNIQUE (user_id, id),
   CHECK (last_seen_at >= first_seen_at)
 );
 
@@ -82,7 +84,8 @@ CREATE TABLE IF NOT EXISTS identity.refresh_families (
   last_used_at timestamptz,
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   CHECK ((revoked_at IS NULL AND revoked_reason IS NULL) OR
-         (revoked_at IS NOT NULL AND revoked_reason IS NOT NULL))
+         (revoked_at IS NOT NULL AND revoked_reason IS NOT NULL)),
+  CONSTRAINT refresh_families_user_composite_pk UNIQUE (user_id, id)
 );
 
 CREATE TABLE IF NOT EXISTS identity.sessions (
@@ -101,6 +104,13 @@ CREATE TABLE IF NOT EXISTS identity.sessions (
   created_ip inet NOT NULL,
   user_agent text NOT NULL CHECK (length(user_agent) <= 512),
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  CONSTRAINT sessions_user_device_fk
+  FOREIGN KEY (user_id, device_id) REFERENCES identity.devices (user_id, id),
+  CONSTRAINT sessions_user_refresh_family_fk
+  FOREIGN KEY (user_id, refresh_family_id) REFERENCES identity.refresh_families (user_id, id),
+  CONSTRAINT sessions_user_rotated_from_session_fk
+  FOREIGN KEY (user_id, rotated_from_session_id) REFERENCES identity.sessions (user_id, id),
+  CONSTRAINT sessions_user_composite_pk UNIQUE (user_id, id),
   CHECK (expires_at > issued_at),
   CHECK (
     (revoked_at IS NULL AND revoke_reason IS NULL) OR
@@ -136,9 +146,13 @@ CREATE INDEX IF NOT EXISTS sessions_family_active_idx ON identity.sessions (refr
 CREATE INDEX IF NOT EXISTS security_events_user_time_idx
   ON identity.security_events (user_id, occurred_at DESC);
 
+DROP TRIGGER IF EXISTS users_updated_at ON identity.users;
+
 CREATE TRIGGER users_updated_at
 BEFORE UPDATE ON identity.users
 FOR EACH ROW EXECUTE FUNCTION platform.touch_updated_at();
+
+DROP TRIGGER IF EXISTS devices_updated_at ON identity.devices;
 
 CREATE TRIGGER devices_updated_at
 BEFORE UPDATE ON identity.devices
