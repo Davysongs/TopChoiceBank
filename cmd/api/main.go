@@ -24,7 +24,7 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	db, err := platformdb.NewPool(platformdb.Config{
+		db, err := platformdb.NewPool(platformdb.Config{
 		DSN:             cfg.DatabaseURL,
 		MaxOpenConns:    cfg.DatabaseMaxOpenConns,
 		MaxIdleConns:    cfg.DatabaseMaxIdleConns,
@@ -32,7 +32,7 @@ func main() {
 	})
 	if err != nil {
 		if cfg.DatabaseAutoMigrate {
-			logger.Error("database pool initialization failed and auto-migrate is enabled", "error", err)
+			logger.Error("database pool initialization failed and auto-migrate is enabled", err)
 			os.Exit(1)
 		}
 		logger.Warn("database pool not initialized yet", "error", err)
