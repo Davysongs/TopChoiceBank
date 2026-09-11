@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"embed"
 	"errors"
+	"fmt"
 	"io/fs"
 	"sort"
 	"strings"
@@ -22,7 +23,7 @@ func ApplyIdentityBootstrapMigrations(ctx context.Context, db *sql.DB) error {
 }
 
 func applyMigrationsFromEmbeddedFiles(ctx context.Context, db *sql.DB, prefix string, source fs.FS) error {
-	entries, err := fs.ReadDir(source, ".")
+	entries, err := fs.ReadDir(source, "migrations")
 	if err != nil {
 		return err
 	}
@@ -36,6 +37,9 @@ func applyMigrationsFromEmbeddedFiles(ctx context.Context, db *sql.DB, prefix st
 		if strings.HasPrefix(name, prefix) && strings.HasSuffix(name, ".sql") {
 			eligible = append(eligible, name)
 		}
+	}
+	if len(eligible) == 0 {
+		return fmt.Errorf("no migration files found for %q", prefix)
 	}
 	sort.Strings(eligible)
 
