@@ -21,6 +21,9 @@ func main() {
 	logger := logging.New(cfg.LogLevel)
 	logger.Info("starting TopChoiceBank v2 API", "environment", cfg.AppEnvironment)
 
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
 	db, err := platformdb.NewPool(platformdb.Config{
 		DSN:             cfg.DatabaseURL,
 		MaxOpenConns:    cfg.DatabaseMaxOpenConns,
@@ -32,7 +35,7 @@ func main() {
 	} else {
 		if cfg.DatabaseAutoMigrate {
 			if err := platformdb.ApplyIdentityBootstrapMigrations(ctx, db); err != nil {
-				logger.Error("identity bootstrap migration failed", "error", err)
+				logger.Error("identity bootstrap migration failed", err)
 				os.Exit(1)
 			}
 		}
@@ -43,9 +46,6 @@ func main() {
 	router.Use(platformhttp.RequestIDMiddleware())
 	router.Use(platformhttp.RequestLoggerMiddleware(logger))
 	platformhttp.RegisterHealthRoutes(router)
-
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
 
 	if err := platformhttp.Run(
 		ctx,
