@@ -1,4 +1,4 @@
-FROM golang:1.22 AS builder
+FROM golang:1.25 AS builder
 
 WORKDIR /workspace
 
@@ -19,4 +19,3 @@ COPY --from=builder /out/scheduler /app/scheduler
 
 EXPOSE 8080
 CMD ["/app/api"]
-
