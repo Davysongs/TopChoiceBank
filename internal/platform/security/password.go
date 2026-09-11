@@ -66,10 +66,11 @@ func VerifyPassword(password, encodedHash string) bool {
 func hash(password string, params PasswordHashParams, salt []byte) string {
 	hash := argon2.IDKey([]byte(password), salt, params.Iterations, params.Memory, params.Parallelism, params.KeyLength)
 	return fmt.Sprintf(
-		"$argon2id$v=19$m=%d,t=%d,p=%d$%s$%s",
+		"$argon2id$v=19$m=%d,t=%d,p=%d,k=%d$%s$%s",
 		params.Memory,
 		params.Iterations,
 		params.Parallelism,
+		params.KeyLength,
 		base64.RawStdEncoding.EncodeToString(salt),
 		base64.RawStdEncoding.EncodeToString(hash),
 	)
@@ -112,7 +113,7 @@ func parseEncodedPasswordHash(encoded string) (PasswordHashParams, []byte, []byt
 
 func parsePasswordHashParams(encoded string) (PasswordHashParams, error) {
 	parts := strings.Split(encoded, ",")
-	if len(parts) != 3 {
+	if len(parts) != 4 {
 		return PasswordHashParams{}, fmt.Errorf("invalid encoded params: %s", encoded)
 	}
 
@@ -128,11 +129,16 @@ func parsePasswordHashParams(encoded string) (PasswordHashParams, error) {
 	if err != nil {
 		return PasswordHashParams{}, err
 	}
+	keyLength, err := parseUint32Part(parts[3], "k=")
+	if err != nil {
+		return PasswordHashParams{}, err
+	}
 
 	return PasswordHashParams{
 		Memory:      memory,
 		Iterations:  iterations,
 		Parallelism: parallelism,
+		KeyLength:   keyLength,
 	}, nil
 }
 

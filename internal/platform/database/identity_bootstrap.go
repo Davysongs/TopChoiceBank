@@ -10,7 +10,7 @@ import (
 	"strings"
 )
 
-//go:embed ../../migrations/*.sql
+//go:embed migrations/*.sql
 var migrationFiles embed.FS
 
 func ApplyIdentityBootstrapMigrations(ctx context.Context, db *sql.DB) error {
