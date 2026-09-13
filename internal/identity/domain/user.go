@@ -24,6 +24,7 @@ type User struct {
 	PasswordHash           string
 	PasswordHashAlgorithm  string
 	Status                 UserStatus
+	PreLockoutStatus       UserStatus
 	EmailVerifiedAt        *time.Time
 	FailedLoginCount       int
 	FailedLoginWindowStart *time.Time
@@ -82,7 +83,12 @@ func (u *User) RecordFailedLogin(now time.Time, lockoutWindow time.Duration, loc
 	u.UpdatedAt = now
 	if u.Status == UserStatusLocked {
 		if u.LockedUntil == nil || !u.IsLocked(now) {
-			u.Status = UserStatusActive
+			if u.PreLockoutStatus != "" {
+				u.Status = u.PreLockoutStatus
+				u.PreLockoutStatus = ""
+			} else {
+				u.Status = UserStatusActive
+			}
 			u.LockedUntil = nil
 			u.FailedLoginCount = 0
 			u.FailedLoginWindowStart = &now
@@ -98,7 +104,10 @@ func (u *User) RecordFailedLogin(now time.Time, lockoutWindow time.Duration, loc
 	if u.FailedLoginCount >= maxAttempts {
 		until := now.Add(lockoutDuration)
 		u.LockedUntil = &until
-		u.Status = UserStatusLocked
+		if u.Status != UserStatusLocked {
+			u.PreLockoutStatus = u.Status
+			u.Status = UserStatusLocked
+		}
 	}
 }
 

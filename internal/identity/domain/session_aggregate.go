@@ -14,7 +14,7 @@ func NewSessionAggregate(family *RefreshFamily, session *Session) (*SessionAggre
 	if session == nil {
 		return nil, ErrMissingSessionID
 	}
-	if family.UserID != session.UserID {
+	if family.UserID != session.UserID || family.ID != session.RefreshFamilyID {
 		return nil, ErrAggregateMismatch
 	}
 
@@ -27,6 +27,9 @@ func NewSessionAggregate(family *RefreshFamily, session *Session) (*SessionAggre
 func (agg *SessionAggregate) Rotate(now time.Time, replacement SessionInput) (*Session, error) {
 	if agg == nil || agg.Session == nil || agg.Family == nil {
 		return nil, ErrAggregateMismatch
+	}
+	if now.IsZero() {
+		now = time.Now().UTC()
 	}
 	if agg.Family.IsRevoked() {
 		return nil, ErrFamilyRevoked
