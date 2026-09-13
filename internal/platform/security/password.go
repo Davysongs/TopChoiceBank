@@ -36,6 +36,7 @@ const (
 	maxArgon2MemoryKiB   = 1024 * 1024
 	maxArgon2Iterations  = 10
 	maxArgon2Parallelism = 32
+	maxEncodedHashLength = 1024
 )
 
 func HashPassword(password string) (string, error) {
@@ -98,6 +99,10 @@ func generateSalt(length int) ([]byte, error) {
 }
 
 func parseEncodedPasswordHash(encoded string) (PasswordHashParams, []byte, []byte, bool) {
+	if len(encoded) > maxEncodedHashLength {
+		return PasswordHashParams{}, nil, nil, false
+	}
+
 	parts := strings.Split(encoded, "$")
 	if len(parts) != 6 {
 		return PasswordHashParams{}, nil, nil, false
