@@ -34,6 +34,7 @@ go.work.sum
 # Cache directories
 .cache/
 .gocache/
+.modcache/
 
 # Logs
 *.log

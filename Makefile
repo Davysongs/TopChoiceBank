@@ -28,3 +28,8 @@ run-worker:
 
 run-scheduler:
 	$(GO) run ./cmd/scheduler
+
+postman-collection:
+	@mkdir -p api/openapi/generated test/postman
+	npx @redocly/cli bundle api/openapi/openapi.yaml --output api/openapi/generated/openapi.bundle.yaml
+	npx openapi-to-postmanv2 -s api/openapi/generated/openapi.bundle.yaml -o test/postman/topchoicebank.postman_collection.json -p
