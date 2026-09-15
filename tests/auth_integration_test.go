@@ -42,7 +42,10 @@ func setupTestServer(t *testing.T) (*httptest.Server, *sql.DB) {
 	}
 
 	// Apply migrations
-	if err := platformdb.ApplyIdentityBootstrapMigrations(context.Background(), db); err != nil {
+	migCtx, migCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer migCancel()
+
+	if err := platformdb.ApplyIdentityBootstrapMigrations(migCtx, db); err != nil {
 		t.Fatalf("failed to apply migrations: %v", err)
 	}
 
@@ -145,8 +148,12 @@ func TestAccountLockoutPolicyAfterFiveFailedAttempts(t *testing.T) {
 	}
 	regBody, _ := json.Marshal(regPayload)
 	regResp, err := http.Post(server.URL+"/v1/auth/register", "application/json", bytes.NewBuffer(regBody))
-	if err != nil || regResp.StatusCode != http.StatusCreated {
-		t.Fatalf("failed to register user for lockout test")
+	if err != nil {
+		t.Fatalf("failed to register user for lockout test: %v", err)
+	}
+	if regResp.StatusCode != http.StatusCreated {
+		regResp.Body.Close()
+		t.Fatalf("failed to register user for lockout test, got status %d", regResp.StatusCode)
 	}
 	regResp.Body.Close()
 
@@ -221,8 +228,12 @@ func TestRefreshTokenRotationAndReuseRevocation(t *testing.T) {
 	}
 	regBody, _ := json.Marshal(regPayload)
 	regResp, err := http.Post(server.URL+"/v1/auth/register", "application/json", bytes.NewBuffer(regBody))
-	if err != nil || regResp.StatusCode != http.StatusCreated {
-		t.Fatalf("failed to register user for refresh test")
+	if err != nil {
+		t.Fatalf("failed to register user for refresh test: %v", err)
+	}
+	if regResp.StatusCode != http.StatusCreated {
+		regResp.Body.Close()
+		t.Fatalf("failed to register user for refresh test, got status %d", regResp.StatusCode)
 	}
 	regResp.Body.Close()
 
@@ -269,8 +280,12 @@ func TestRefreshTokenRotationAndReuseRevocation(t *testing.T) {
 	}
 	refreshBody, _ := json.Marshal(refreshPayload)
 	refreshResp, err := http.Post(server.URL+"/v1/auth/refresh", "application/json", bytes.NewBuffer(refreshBody))
-	if err != nil || refreshResp.StatusCode != http.StatusOK {
-		t.Fatalf("refresh failed: %v, status %d", err, refreshResp.StatusCode)
+	if err != nil {
+		t.Fatalf("refresh request failed: %v", err)
+	}
+	if refreshResp.StatusCode != http.StatusOK {
+		refreshResp.Body.Close()
+		t.Fatalf("expected status 200 OK for refresh, got %d", refreshResp.StatusCode)
 	}
 
 	var refreshData identity.LoginResponse
