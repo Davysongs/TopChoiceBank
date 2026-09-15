@@ -51,5 +51,6 @@ VALUES (
   'identity.user_registered.v1',
   1,
   '{"$schema":"http://json-schema.org/draft-07/schema#","type":"object","properties":{"user_id":{"type":"string"},"email":{"type":"string"},"status":{"type":"string"}},"required":["user_id","email","status"]}'::jsonb,
-  digest('identity.user_registered.v1:1', 'sha256')
+  sha256('identity.user_registered.v1:1'::bytea)
 ) ON CONFLICT (event_type, schema_version) DO NOTHING;
+

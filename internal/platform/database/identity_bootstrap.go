@@ -50,7 +50,7 @@ func applyMigrationsFromEmbeddedFiles(ctx context.Context, db *sql.DB, prefix st
 		}
 
 		if _, execErr := db.ExecContext(ctx, string(contents)); execErr != nil {
-			return execErr
+			return fmt.Errorf("error executing migration file %s: %w", name, execErr)
 		}
 	}
 
