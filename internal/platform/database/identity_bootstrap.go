@@ -19,7 +19,7 @@ func ApplyIdentityBootstrapMigrations(ctx context.Context, db *sql.DB) error {
 		return errors.New("database pool is required")
 	}
 
-	return applyMigrationsFromEmbeddedFiles(ctx, db, "0001_identity_bootstrap", migrationFiles)
+	return applyMigrationsFromEmbeddedFiles(ctx, db, "", migrationFiles)
 }
 
 func applyMigrationsFromEmbeddedFiles(ctx context.Context, db *sql.DB, prefix string, source fs.FS) error {
