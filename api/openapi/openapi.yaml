@@ -1,7 +1,6 @@
 openapi: 3.0.3
 info:
   title: TopChoiceBank v2
-  version: 0.0.0
   version: 0.1.0
   description: Foundation API for TopChoiceBank v2
 paths:
@@ -105,6 +104,37 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
+  /v1/auth/refresh:
+    post:
+      summary: Rotate a valid refresh token and issue a new access token
+      operationId: refreshSession
+      tags:
+        - Authentication
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshRequest'
+      responses:
+        '200':
+          description: Session refreshed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '400':
+          description: Malformed JSON or invalid syntax
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '401':
+          description: Invalid, expired, or reused refresh token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
         '500':
           description: Internal server error
           content:
@@ -199,6 +229,19 @@ components:
         mfa_required:
           type: boolean
           example: false
+
+    RefreshRequest:
+      type: object
+      required:
+        - refresh_token
+        - device_fingerprint
+      properties:
+        refresh_token:
+          type: string
+          example: a1b2c3d4e5f6...
+        device_fingerprint:
+          type: string
+          example: fp_abc123xyz
 
     ProblemDetails:
       type: object
