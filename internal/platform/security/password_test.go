@@ -1,6 +1,9 @@
 package security
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestHashAndVerifyPassword(t *testing.T) {
 	hashed, err := HashPassword("correct-horse-battery-staple")
@@ -41,5 +44,12 @@ func TestVerifyPasswordRejectsUnsafeEncodedParams(t *testing.T) {
 		if VerifyPassword("correct-horse-battery-staple", encoded) {
 			t.Fatalf("VerifyPassword() expected %q to be rejected", encoded)
 		}
+	}
+}
+
+func TestParseEncodedPasswordHashRejectsOversizedInput(t *testing.T) {
+	longEncoded := "$argon2id$v=19$m=65536,t=3,p=2,k=32$" + strings.Repeat("A", 2000)
+	if _, _, _, ok := parseEncodedPasswordHash(longEncoded); ok {
+		t.Fatal("parseEncodedPasswordHash() expected oversized encoded hash to be rejected")
 	}
 }
