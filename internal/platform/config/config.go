@@ -16,6 +16,7 @@ const (
 	defaultDatabaseMaxOpenConns     = 25
 	defaultDatabaseMaxIdleConns     = 5
 	defaultDatabaseConnLifetime     = 5 * time.Minute
+	defaultJWTSecret                = "topchoicebank-default-development-jwt-secret-key-32bytes"
 )
 
 type Config struct {
@@ -29,6 +30,7 @@ type Config struct {
 	DatabaseMaxOpenConns    int
 	DatabaseMaxIdleConns    int
 	DatabaseConnMaxLifetime time.Duration
+	JWTSecret               string
 }
 
 func Load() (Config, error) {
@@ -43,6 +45,7 @@ func Load() (Config, error) {
 		DatabaseMaxOpenConns:    getInt("DATABASE_MAX_OPEN_CONNS", defaultDatabaseMaxOpenConns),
 		DatabaseMaxIdleConns:    getInt("DATABASE_MAX_IDLE_CONNS", defaultDatabaseMaxIdleConns),
 		DatabaseConnMaxLifetime: time.Second * time.Duration(getInt("DATABASE_CONN_MAX_LIFETIME_SECONDS", int(defaultDatabaseConnLifetime.Seconds()))),
+		JWTSecret:               getEnv("JWT_SECRET", defaultJWTSecret),
 	}
 
 	if cfg.DatabaseURL == "" {
