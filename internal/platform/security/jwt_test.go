@@ -44,4 +44,3 @@ func TestVerifyAccessTokenExpired(t *testing.T) {
 		t.Errorf("expected ErrExpiredToken, got %v", err)
 	}
 }
-

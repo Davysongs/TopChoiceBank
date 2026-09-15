@@ -1,6 +1,7 @@
 openapi: 3.0.3
 info:
   title: TopChoiceBank v2
+  version: 0.0.0
   version: 0.1.0
   description: Foundation API for TopChoiceBank v2
 paths:

@@ -12,10 +12,10 @@ import (
 )
 
 var (
-	ErrUserNotFound      = errors.New("user not found")
-	ErrDuplicateEmail    = errors.New("email already registered")
-	ErrSessionNotFound   = errors.New("session not found")
-	ErrFamilyNotFound    = errors.New("refresh family not found")
+	ErrUserNotFound    = errors.New("user not found")
+	ErrDuplicateEmail  = errors.New("email already registered")
+	ErrSessionNotFound = errors.New("session not found")
+	ErrFamilyNotFound  = errors.New("refresh family not found")
 )
 
 type Repository interface {
@@ -419,4 +419,3 @@ func (r *PostgresRepository) RecordSecurityEvent(ctx context.Context, userID str
 	_, err = r.db.ExecContext(ctx, query, userID, eventType, outcome, requestID, sourceIP, metadataBytes)
 	return err
 }
-

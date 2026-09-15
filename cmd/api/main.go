@@ -56,6 +56,11 @@ func main() {
 		platformhttp.RegisterAuthRoutes(router, identityService)
 	}
 
+	router := platformhttp.NewRouter()
+	router.Use(platformhttp.RequestIDMiddleware())
+	router.Use(platformhttp.RequestLoggerMiddleware(logger))
+	platformhttp.RegisterHealthRoutes(router)
+
 	if err := platformhttp.Run(
 		ctx,
 		cfg.HTTPAddress(),

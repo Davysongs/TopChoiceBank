@@ -18,20 +18,20 @@ import (
 )
 
 var (
-	ErrInvalidEmail      = errors.New("invalid email address")
-	ErrWeakPassword     = errors.New("password must be at least 8 characters long")
-	ErrMissingTerms     = errors.New("accepted terms version is required")
+	ErrInvalidEmail       = errors.New("invalid email address")
+	ErrWeakPassword       = errors.New("password must be at least 8 characters long")
+	ErrMissingTerms       = errors.New("accepted terms version is required")
 	ErrInvalidCredentials = errors.New("invalid email or password")
-	ErrAccountLocked     = errors.New("account is locked due to too many failed attempts")
-	ErrAccountDisabled   = errors.New("account is disabled")
-	ErrTokenRevoked      = errors.New("refresh token has been revoked")
-	ErrTokenExpired      = errors.New("refresh token has expired")
+	ErrAccountLocked      = errors.New("account is locked due to too many failed attempts")
+	ErrAccountDisabled    = errors.New("account is disabled")
+	ErrTokenRevoked       = errors.New("refresh token has been revoked")
+	ErrTokenExpired       = errors.New("refresh token has expired")
 )
 
 const (
 	lockoutWindow   = 15 * time.Minute
 	lockoutDuration = 30 * time.Minute
-	maxAttempts      = 5
+	maxAttempts     = 5
 	jwtDuration     = 15 * time.Minute
 )
 
@@ -42,8 +42,8 @@ type RegisterRequest struct {
 }
 
 type RegisterResponse struct {
-	UserID                   string `json:"user_id"`
-	Status                   string `json:"status"`
+	UserID                    string `json:"user_id"`
+	Status                    string `json:"status"`
 	EmailVerificationRequired bool   `json:"email_verification_required"`
 }
 
@@ -134,8 +134,8 @@ func (s *Service) Register(ctx context.Context, req RegisterRequest) (*RegisterR
 	}
 
 	return &RegisterResponse{
-		UserID:                   user.ID,
-		Status:                   string(user.Status),
+		UserID:                    user.ID,
+		Status:                    string(user.Status),
 		EmailVerificationRequired: true,
 	}, nil
 }
@@ -330,4 +330,3 @@ func formatUserAgent(ua string) string {
 	}
 	return ua
 }
-

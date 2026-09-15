@@ -65,4 +65,3 @@ func AppendOutboxEvent(ctx context.Context, tx *sql.Tx, input OutboxEventInput) 
 
 	return nil
 }
-

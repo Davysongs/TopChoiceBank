@@ -111,4 +111,3 @@ func HashToken(token string) []byte {
 	hash := sha256.Sum256([]byte(token))
 	return hash[:]
 }
-
