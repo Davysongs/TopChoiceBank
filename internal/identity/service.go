@@ -29,10 +29,11 @@ var (
 )
 
 const (
-	lockoutWindow   = 15 * time.Minute
-	lockoutDuration = 30 * time.Minute
-	maxAttempts     = 5
-	jwtDuration     = 15 * time.Minute
+	lockoutWindow          = 15 * time.Minute
+	lockoutDuration        = 30 * time.Minute
+	maxAttempts             = 5
+	jwtDuration            = 15 * time.Minute
+	refreshSessionDuration = 7 * 24 * time.Hour
 )
 
 type RegisterRequest struct {
@@ -42,8 +43,8 @@ type RegisterRequest struct {
 }
 
 type RegisterResponse struct {
-	UserID                    string `json:"user_id"`
-	Status                    string `json:"status"`
+	UserID                   string `json:"user_id"`
+	Status                   string `json:"status"`
 	EmailVerificationRequired bool   `json:"email_verification_required"`
 }
 
@@ -134,8 +135,8 @@ func (s *Service) Register(ctx context.Context, req RegisterRequest) (*RegisterR
 	}
 
 	return &RegisterResponse{
-		UserID:                    user.ID,
-		Status:                    string(user.Status),
+		UserID:                   user.ID,
+		Status:                   string(user.Status),
 		EmailVerificationRequired: true,
 	}, nil
 }
@@ -150,7 +151,7 @@ func (s *Service) Login(ctx context.Context, req LoginRequest) (*LoginResponse, 
 	user, err := s.repo.GetUserByEmail(ctx, email)
 	if err != nil {
 		if errors.Is(err, ErrUserNotFound) {
-			_ = s.repo.RecordSecurityEvent(ctx, "", "identity.login_failed.v1", "FAILURE", req.RequestID, req.RequestIP, map[string]any{"reason": "user_not_found", "email": email})
+			_ = s.repo.RecordSecurityEvent(ctx, "", "identity.login_failed.v1", "FAILURE", req.RequestID, req.RequestIP, map[string]any{"reason": "user_not_found"})
 			return nil, ErrInvalidCredentials
 		}
 		return nil, err
@@ -169,7 +170,9 @@ func (s *Service) Login(ctx context.Context, req LoginRequest) (*LoginResponse, 
 	valid := s.hasher.Verify(req.Password, user.PasswordHash)
 	if !valid {
 		user.RecordFailedLogin(now, lockoutWindow, lockoutDuration, maxAttempts)
-		_ = s.repo.UpdateUserStatusAndLockout(ctx, user)
+		if err := s.repo.UpdateUserStatusAndLockout(ctx, user); err != nil {
+			return nil, err
+		}
 		_ = s.repo.RecordSecurityEvent(ctx, user.ID, "identity.login_failed.v1", "FAILURE", req.RequestID, req.RequestIP, map[string]any{"failed_count": user.FailedLoginCount})
 
 		if user.Status == domain.UserStatusLocked {
@@ -206,7 +209,7 @@ func (s *Service) Login(ctx context.Context, req LoginRequest) (*LoginResponse, 
 		AccessTokenJTI:   jti,
 		RefreshTokenHash: hex.EncodeToString(refreshTokenHash),
 		IssuedAt:         now,
-		ExpiresAt:        now.Add(15 * time.Minute),
+		ExpiresAt:        now.Add(refreshSessionDuration),
 		CreatedIP:        formatIP(req.RequestIP),
 		UserAgent:        formatUserAgent(req.UserAgent),
 	}
@@ -280,7 +283,7 @@ func (s *Service) RefreshSession(ctx context.Context, req RefreshRequest) (*Logi
 		RefreshFamilyID:  agg.Family.ID,
 		AccessTokenJTI:   nextJTI,
 		RefreshTokenHash: hex.EncodeToString(nextRefreshTokenHash),
-		ExpiresAt:        now.Add(15 * time.Minute),
+		ExpiresAt:        now.Add(refreshSessionDuration),
 		CreatedIP:        formatIP(req.RequestIP),
 		UserAgent:        formatUserAgent(req.UserAgent),
 	}
