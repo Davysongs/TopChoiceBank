@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"net"
 	"net/mail"
 	"strings"
 	"time"
@@ -284,12 +285,13 @@ func (s *Service) RefreshSession(ctx context.Context, req RefreshRequest) (*Logi
 		UserAgent:        formatUserAgent(req.UserAgent),
 	}
 
+	oldSessionID := agg.Session.ID
 	rotatedSession, err := agg.Rotate(now, replacement)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := s.repo.RotateSession(ctx, agg, rotatedSession); err != nil {
+	if err := s.repo.RotateSession(ctx, oldSessionID, agg, rotatedSession); err != nil {
 		return nil, err
 	}
 
@@ -311,6 +313,9 @@ func formatIP(ip string) string {
 	ip = strings.TrimSpace(ip)
 	if ip == "" {
 		return "127.0.0.1"
+	}
+	if host, _, err := net.SplitHostPort(ip); err == nil {
+		return host
 	}
 	return ip
 }

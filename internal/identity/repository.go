@@ -25,7 +25,7 @@ type Repository interface {
 	UpdateUserStatusAndLockout(ctx context.Context, user *domain.User) error
 	CreateSessionAndFamily(ctx context.Context, family *domain.RefreshFamily, session *domain.Session) error
 	GetSessionAndFamilyByRefreshTokenHash(ctx context.Context, refreshHash []byte) (*domain.SessionAggregate, error)
-	RotateSession(ctx context.Context, agg *domain.SessionAggregate, rotatedSession *domain.Session) error
+	RotateSession(ctx context.Context, oldSessionID string, agg *domain.SessionAggregate, rotatedSession *domain.Session) error
 	RevokeRefreshFamily(ctx context.Context, familyID string, reason string) error
 	RecordSecurityEvent(ctx context.Context, userID string, eventType string, outcome string, requestID string, sourceIP string, metadata map[string]any) error
 }
@@ -305,7 +305,7 @@ func (r *PostgresRepository) GetSessionAndFamilyByRefreshTokenHash(ctx context.C
 	return domain.NewSessionAggregate(&f, &s)
 }
 
-func (r *PostgresRepository) RotateSession(ctx context.Context, agg *domain.SessionAggregate, rotatedSession *domain.Session) error {
+func (r *PostgresRepository) RotateSession(ctx context.Context, oldSessionID string, agg *domain.SessionAggregate, rotatedSession *domain.Session) error {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -318,7 +318,7 @@ func (r *PostgresRepository) RotateSession(ctx context.Context, agg *domain.Sess
 		SET revoked_at = $1, revoke_reason = $2
 		WHERE id = $3 AND revoked_at IS NULL
 	`
-	_, err = tx.ExecContext(ctx, revokeOldQuery, agg.Session.RevokedAt, agg.Session.RevokeReason, agg.Session.ID)
+	_, err = tx.ExecContext(ctx, revokeOldQuery, rotatedSession.IssuedAt, "rotated", oldSessionID)
 	if err != nil {
 		return fmt.Errorf("failed to revoke rotated session: %w", err)
 	}
@@ -419,3 +419,4 @@ func (r *PostgresRepository) RecordSecurityEvent(ctx context.Context, userID str
 	_, err = r.db.ExecContext(ctx, query, userID, eventType, outcome, requestID, sourceIP, metadataBytes)
 	return err
 }
+
