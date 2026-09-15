@@ -9,6 +9,7 @@ import (
 
 	"github.com/Davysongs/TopChoiceBank/internal/identity/domain"
 	platformdb "github.com/Davysongs/TopChoiceBank/internal/platform/database"
+	"github.com/lib/pq"
 )
 
 var (
@@ -65,7 +66,11 @@ func (r *PostgresRepository) CreateUserWithOutbox(ctx context.Context, user *dom
 		user.UpdatedAt,
 	)
 	if err != nil {
-		return fmt.Errorf("%w: %v", ErrDuplicateEmail, err)
+		var pqErr *pq.Error
+		if errors.As(err, &pqErr) && pqErr.Code == "23505" {
+			return fmt.Errorf("%w: %v", ErrDuplicateEmail, err)
+		}
+		return err
 	}
 
 	roleQuery := `
@@ -318,9 +323,16 @@ func (r *PostgresRepository) RotateSession(ctx context.Context, oldSessionID str
 		SET revoked_at = $1, revoke_reason = $2
 		WHERE id = $3 AND revoked_at IS NULL
 	`
-	_, err = tx.ExecContext(ctx, revokeOldQuery, rotatedSession.IssuedAt, "rotated", oldSessionID)
+	res, err := tx.ExecContext(ctx, revokeOldQuery, rotatedSession.IssuedAt, "rotated", oldSessionID)
 	if err != nil {
 		return fmt.Errorf("failed to revoke rotated session: %w", err)
+	}
+	rows, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to revoke rotated session: %w", err)
+	}
+	if rows == 0 {
+		return fmt.Errorf("failed to revoke rotated session: %w", fmt.Errorf("zero rows affected"))
 	}
 
 	// Insert new session
@@ -375,27 +387,24 @@ func (r *PostgresRepository) RevokeRefreshFamily(ctx context.Context, familyID s
 	}
 	defer tx.Rollback()
 
-	now := sql.NullTime{Valid: true}
-	_ = tx.QueryRowContext(ctx, "SELECT clock_timestamp()").Scan(&now)
-
 	updateFamilyQuery := `
 		UPDATE identity.refresh_families
-		SET revoked_at = COALESCE(revoked_at, $1),
-		    revoked_reason = COALESCE(revoked_reason, $2)
-		WHERE id = $3
+		SET revoked_at = COALESCE(revoked_at, clock_timestamp()),
+		    revoked_reason = COALESCE(revoked_reason, $1)
+		WHERE id = $2
 	`
-	_, err = tx.ExecContext(ctx, updateFamilyQuery, now.Time, reason, familyID)
+	_, err = tx.ExecContext(ctx, updateFamilyQuery, reason, familyID)
 	if err != nil {
 		return fmt.Errorf("failed to revoke family: %w", err)
 	}
 
 	updateSessionsQuery := `
 		UPDATE identity.sessions
-		SET revoked_at = COALESCE(revoked_at, $1),
-		    revoke_reason = COALESCE(revoke_reason, $2)
-		WHERE refresh_family_id = $3 AND revoked_at IS NULL
+		SET revoked_at = COALESCE(revoked_at, clock_timestamp()),
+		    revoke_reason = COALESCE(revoke_reason, $1)
+		WHERE refresh_family_id = $2 AND revoked_at IS NULL
 	`
-	_, err = tx.ExecContext(ctx, updateSessionsQuery, now.Time, reason, familyID)
+	_, err = tx.ExecContext(ctx, updateSessionsQuery, reason, familyID)
 	if err != nil {
 		return fmt.Errorf("failed to revoke sessions in family: %w", err)
 	}
