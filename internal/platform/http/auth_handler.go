@@ -39,6 +39,8 @@ func RegisterAuthRoutes(router *Router, service *identity.Service) {
 	router.HandleFunc("/v1/auth/refresh", handleRefresh(service))
 }
 
+const maxAuthRequestBodyBytes = 65536
+
 func handleRegister(service *identity.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
@@ -46,6 +48,7 @@ func handleRegister(service *identity.Service) http.HandlerFunc {
 			return
 		}
 
+		r.Body = http.MaxBytesReader(w, r.Body, maxAuthRequestBodyBytes)
 		var req identity.RegisterRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			writeProblem(w, http.StatusBadRequest, "Malformed JSON", "Request body must be valid JSON", r.URL.Path)
@@ -77,6 +80,7 @@ func handleLogin(service *identity.Service) http.HandlerFunc {
 			return
 		}
 
+		r.Body = http.MaxBytesReader(w, r.Body, maxAuthRequestBodyBytes)
 		var req identity.LoginRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			writeProblem(w, http.StatusBadRequest, "Malformed JSON", "Request body must be valid JSON", r.URL.Path)
@@ -112,6 +116,7 @@ func handleRefresh(service *identity.Service) http.HandlerFunc {
 			return
 		}
 
+		r.Body = http.MaxBytesReader(w, r.Body, maxAuthRequestBodyBytes)
 		var req identity.RefreshRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			writeProblem(w, http.StatusBadRequest, "Malformed JSON", "Request body must be valid JSON", r.URL.Path)
