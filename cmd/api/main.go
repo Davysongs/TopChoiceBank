@@ -6,6 +6,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/Davysongs/TopChoiceBank/internal/identity"
 	"github.com/Davysongs/TopChoiceBank/internal/platform/config"
 	platformdb "github.com/Davysongs/TopChoiceBank/internal/platform/database"
 	platformhttp "github.com/Davysongs/TopChoiceBank/internal/platform/http"
@@ -23,6 +24,11 @@ func main() {
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+
+	router := platformhttp.NewRouter()
+	router.Use(platformhttp.RequestIDMiddleware())
+	router.Use(platformhttp.RequestLoggerMiddleware(logger))
+	platformhttp.RegisterHealthRoutes(router)
 
 	db, err := platformdb.NewPool(platformdb.Config{
 		DSN:             cfg.DatabaseURL,
@@ -44,12 +50,11 @@ func main() {
 			}
 		}
 		defer platformdb.Shutdown(context.Background(), db)
-	}
 
-	router := platformhttp.NewRouter()
-	router.Use(platformhttp.RequestIDMiddleware())
-	router.Use(platformhttp.RequestLoggerMiddleware(logger))
-	platformhttp.RegisterHealthRoutes(router)
+		identityRepo := identity.NewPostgresRepository(db)
+		identityService := identity.NewService(identityRepo, cfg.JWTSecret)
+		platformhttp.RegisterAuthRoutes(router, identityService)
+	}
 
 	if err := platformhttp.Run(
 		ctx,
