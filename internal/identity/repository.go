@@ -14,6 +14,10 @@ import (
 )
 
 var (
+	ErrUserNotFound    = errors.New("user not found")
+	ErrDuplicateEmail  = errors.New("email already registered")
+	ErrSessionNotFound = errors.New("session not found")
+	ErrFamilyNotFound  = errors.New("refresh family not found")
 	ErrUserNotFound          = errors.New("user not found")
 	ErrDuplicateEmail        = errors.New("email already registered")
 	ErrSessionNotFound       = errors.New("session not found")
@@ -343,6 +347,7 @@ func (r *PostgresRepository) RotateSession(ctx context.Context, oldSessionID str
 		return fmt.Errorf("failed to revoke rotated session: %w", err)
 	}
 	if rows == 0 {
+		return fmt.Errorf("failed to revoke rotated session: %w", fmt.Errorf("zero rows affected"))
 		return ErrSessionAlreadyRevoked
 	}
 

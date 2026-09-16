@@ -125,6 +125,9 @@ func (s *Service) Register(ctx context.Context, req RegisterRequest) (*RegisterR
 		EventType:        "identity.user_registered.v1",
 		SchemaVersion:    1,
 		Payload: map[string]any{
+			"user_id": user.ID,
+			"email":   user.Email,
+			"status":  string(user.Status),
 			"user_id":                user.ID,
 			"email":                  user.Email,
 			"status":                 string(user.Status),
@@ -285,6 +288,7 @@ func (s *Service) RefreshSession(ctx context.Context, req RefreshRequest) (*Logi
 
 	// Token reuse detection
 	if agg.Family.IsRevoked() || agg.Session.RevokedAt != nil {
+		_ = s.repo.RevokeRefreshFamily(ctx, agg.Family.ID, "reuse_detected")
 		if revokeErr := s.repo.RevokeRefreshFamily(ctx, agg.Family.ID, "reuse_detected"); revokeErr != nil {
 			return nil, revokeErr
 		}
