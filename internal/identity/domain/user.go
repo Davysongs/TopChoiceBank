@@ -123,7 +123,12 @@ func (u *User) RecordSuccessfulLogin(now time.Time) {
 	u.FailedLoginCount = 0
 	u.FailedLoginWindowStart = nil
 	u.LockedUntil = nil
-	if u.Status == UserStatusPending {
-		u.Status = UserStatusActive
+	if u.Status == UserStatusPending || u.Status == UserStatusLocked {
+		if u.PreLockoutStatus != "" {
+			u.Status = u.PreLockoutStatus
+			u.PreLockoutStatus = ""
+		} else {
+			u.Status = UserStatusActive
+		}
 	}
 }
