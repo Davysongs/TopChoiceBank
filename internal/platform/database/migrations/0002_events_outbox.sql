@@ -52,6 +52,5 @@ VALUES (
   1,
   '{"$schema":"http://json-schema.org/draft-07/schema#","type":"object","properties":{"user_id":{"type":"string"},"email":{"type":"string"},"status":{"type":"string"}},"required":["user_id","email","status"]}'::jsonb,
   sha256('{"$schema":"http://json-schema.org/draft-07/schema#","type":"object","properties":{"user_id":{"type":"string"},"email":{"type":"string"},"status":{"type":"string"}},"required":["user_id","email","status"]}'::bytea)
-  digest('{"$schema":"http://json-schema.org/draft-07/schema#","type":"object","properties":{"user_id":{"type":"string"},"email":{"type":"string"},"status":{"type":"string"}},"required":["user_id","email","status"]}'::bytea, 'sha256')
 ) ON CONFLICT (event_type, schema_version) DO NOTHING;
 

@@ -14,10 +14,6 @@ import (
 )
 
 var (
-	ErrUserNotFound    = errors.New("user not found")
-	ErrDuplicateEmail  = errors.New("email already registered")
-	ErrSessionNotFound = errors.New("session not found")
-	ErrFamilyNotFound  = errors.New("refresh family not found")
 	ErrUserNotFound          = errors.New("user not found")
 	ErrDuplicateEmail        = errors.New("email already registered")
 	ErrSessionNotFound       = errors.New("session not found")
