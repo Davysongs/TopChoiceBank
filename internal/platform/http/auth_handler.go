@@ -139,6 +139,10 @@ func handleRefresh(service *identity.Service) http.HandlerFunc {
 				writeProblem(w, http.StatusUnauthorized, "Unauthorized", err.Error(), r.URL.Path)
 				return
 			}
+			if errors.Is(err, identity.ErrAccountLocked) || errors.Is(err, identity.ErrAccountDisabled) {
+				writeProblem(w, http.StatusForbidden, "Access Forbidden", err.Error(), r.URL.Path)
+				return
+			}
 			writeProblem(w, http.StatusInternalServerError, "Internal Server Error", "An error occurred refreshing token", r.URL.Path)
 			return
 		}

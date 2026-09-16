@@ -122,6 +122,17 @@ func TestRegistrationAndOutboxEmission(t *testing.T) {
 		t.Fatalf("expected aggregate_id %s, got %s", regResp.UserID, aggregateID)
 	}
 
+	var payloadMap map[string]any
+	if err := json.Unmarshal([]byte(payloadJSON), &payloadMap); err != nil {
+		t.Fatalf("failed to parse outbox payload: %v", err)
+	}
+	if payloadMap["accepted_terms_version"] != "v1.0" {
+		t.Fatalf("expected accepted_terms_version v1.0, got %v", payloadMap["accepted_terms_version"])
+	}
+	if _, ok := payloadMap["accepted_terms_at"]; !ok {
+		t.Fatalf("expected accepted_terms_at in outbox payload")
+	}
+
 	// Duplicate registration check -> 409 Conflict
 	respDup, err := http.Post(server.URL+"/v1/auth/register", "application/json", bytes.NewBuffer(body))
 	if err != nil {
@@ -352,5 +363,148 @@ func TestRefreshTokenRotationAndReuseRevocation(t *testing.T) {
 
 	if subsequentResp.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("expected status 401 Unauthorized for token in revoked family, got %d", subsequentResp.StatusCode)
+	}
+}
+
+func TestExpiredLockoutAutoUnlock(t *testing.T) {
+	server, db := setupTestServer(t)
+	defer server.Close()
+	defer db.Close()
+
+	testEmail := fmt.Sprintf("test_expired_lock_%d@example.com", time.Now().UnixNano())
+	password := "ValidP@ssword123!"
+
+	regPayload := map[string]string{
+		"email":                  testEmail,
+		"password":               password,
+		"accepted_terms_version": "v1.0",
+	}
+	regBody, _ := json.Marshal(regPayload)
+	regResp, err := http.Post(server.URL+"/v1/auth/register", "application/json", bytes.NewBuffer(regBody))
+	if err != nil {
+		t.Fatalf("failed to register user: %v", err)
+	}
+	if regResp.StatusCode != http.StatusCreated {
+		t.Fatalf("expected 201 Created, got %d", regResp.StatusCode)
+	}
+	regResp.Body.Close()
+
+	// Manually set status to LOCKED with an EXPIRED locked_until timestamp (10 minutes in the past)
+	pastTime := time.Now().UTC().Add(-10 * time.Minute)
+	_, err = db.Exec(`
+		UPDATE identity.users
+		SET status = 'LOCKED', locked_until = $1
+		WHERE email = $2
+	`, pastTime, testEmail)
+	if err != nil {
+		t.Fatalf("failed to manually lock user in db: %v", err)
+	}
+
+	// Login with correct password after lock expiration
+	loginPayload := map[string]string{
+		"email":              testEmail,
+		"password":           password,
+		"device_fingerprint": "dev_fp_789",
+	}
+	loginBody, _ := json.Marshal(loginPayload)
+	loginResp, err := http.Post(server.URL+"/v1/auth/login", "application/json", bytes.NewBuffer(loginBody))
+	if err != nil {
+		t.Fatalf("login request failed: %v", err)
+	}
+	defer loginResp.Body.Close()
+
+	if loginResp.StatusCode != http.StatusOK {
+		t.Fatalf("expected status 200 OK for expired lockout login, got %d", loginResp.StatusCode)
+	}
+
+	// Verify database status is now ACTIVE and locked_until is NULL
+	var status string
+	var lockedUntil sql.NullTime
+	err = db.QueryRow("SELECT status, locked_until FROM identity.users WHERE email = $1", testEmail).Scan(&status, &lockedUntil)
+	if err != nil {
+		t.Fatalf("failed to query user status from db: %v", err)
+	}
+
+	if status != "ACTIVE" {
+		t.Fatalf("expected status ACTIVE in db, got %s", status)
+	}
+	if lockedUntil.Valid {
+		t.Fatalf("expected locked_until to be NULL in db, got %v", lockedUntil)
+	}
+}
+
+func TestDeviceBindingAndDisabledUserRefreshRejection(t *testing.T) {
+	server, db := setupTestServer(t)
+	defer server.Close()
+	defer db.Close()
+
+	testEmail := fmt.Sprintf("test_device_%d@example.com", time.Now().UnixNano())
+	password := "ValidP@ssword123!"
+
+	regPayload := map[string]string{
+		"email":                  testEmail,
+		"password":               password,
+		"accepted_terms_version": "v1.0",
+	}
+	regBody, _ := json.Marshal(regPayload)
+	regResp, err := http.Post(server.URL+"/v1/auth/register", "application/json", bytes.NewBuffer(regBody))
+	if err != nil {
+		t.Fatalf("failed to register user: %v", err)
+	}
+	if regResp.StatusCode != http.StatusCreated {
+		regResp.Body.Close()
+		t.Fatalf("expected 201 Created, got %d", regResp.StatusCode)
+	}
+	regResp.Body.Close()
+
+	// Login with device fingerprint
+	loginPayload := map[string]string{
+		"email":              testEmail,
+		"password":           password,
+		"device_fingerprint": "fp_test_device_123",
+	}
+	loginBody, _ := json.Marshal(loginPayload)
+	loginResp, err := http.Post(server.URL+"/v1/auth/login", "application/json", bytes.NewBuffer(loginBody))
+	if err != nil {
+		t.Fatalf("failed to login: %v", err)
+	}
+	if loginResp.StatusCode != http.StatusOK {
+		loginResp.Body.Close()
+		t.Fatalf("expected 200 OK for login, got %d", loginResp.StatusCode)
+	}
+	var loginData identity.LoginResponse
+	_ = json.NewDecoder(loginResp.Body).Decode(&loginData)
+	loginResp.Body.Close()
+
+	// Verify device record was created in identity.devices and bound to session
+	var deviceID sql.NullString
+	err = db.QueryRow("SELECT device_id::text FROM identity.sessions WHERE id = $1", loginData.SessionID).Scan(&deviceID)
+	if err != nil {
+		t.Fatalf("failed to query session device_id: %v", err)
+	}
+	if !deviceID.Valid || deviceID.String == "" {
+		t.Fatal("expected non-null device_id on session created with device fingerprint")
+	}
+
+	// Disable user in database
+	_, err = db.Exec("UPDATE identity.users SET status = 'DISABLED' WHERE email = $1", testEmail)
+	if err != nil {
+		t.Fatalf("failed to disable user in db: %v", err)
+	}
+
+	// Attempt refresh while user is DISABLED -> should be rejected with 403 Forbidden
+	refreshPayload := map[string]string{
+		"refresh_token":      loginData.RefreshToken,
+		"device_fingerprint": "fp_test_device_123",
+	}
+	refreshBody, _ := json.Marshal(refreshPayload)
+	refreshResp, err := http.Post(server.URL+"/v1/auth/refresh", "application/json", bytes.NewBuffer(refreshBody))
+	if err != nil {
+		t.Fatalf("refresh request failed: %v", err)
+	}
+	defer refreshResp.Body.Close()
+
+	if refreshResp.StatusCode != http.StatusForbidden {
+		t.Fatalf("expected status 403 Forbidden for disabled user refresh, got %d", refreshResp.StatusCode)
 	}
 }
