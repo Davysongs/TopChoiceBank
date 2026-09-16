@@ -508,3 +508,91 @@ func TestDeviceBindingAndDisabledUserRefreshRejection(t *testing.T) {
 		t.Fatalf("expected status 403 Forbidden for disabled user refresh, got %d", refreshResp.StatusCode)
 	}
 }
+
+func TestBoundDeviceIdentityEnforcementOnRefresh(t *testing.T) {
+	server, db := setupTestServer(t)
+	defer server.Close()
+	defer db.Close()
+
+	testEmail := fmt.Sprintf("test_bound_device_%d@example.com", time.Now().UnixNano())
+	password := "ValidP@ssword123!"
+
+	regPayload := map[string]string{
+		"email":                  testEmail,
+		"password":               password,
+		"accepted_terms_version": "v1.0",
+	}
+	regBody, _ := json.Marshal(regPayload)
+	regResp, err := http.Post(server.URL+"/v1/auth/register", "application/json", bytes.NewBuffer(regBody))
+	if err != nil {
+		t.Fatalf("failed to register user: %v", err)
+	}
+	if regResp.StatusCode != http.StatusCreated {
+		regResp.Body.Close()
+		t.Fatalf("expected 201 Created, got %d", regResp.StatusCode)
+	}
+	regResp.Body.Close()
+
+	// Login with Device A
+	loginPayload := map[string]string{
+		"email":              testEmail,
+		"password":           password,
+		"device_fingerprint": "device_fingerprint_A",
+	}
+	loginBody, _ := json.Marshal(loginPayload)
+	loginResp, err := http.Post(server.URL+"/v1/auth/login", "application/json", bytes.NewBuffer(loginBody))
+	if err != nil {
+		t.Fatalf("failed to login: %v", err)
+	}
+	if loginResp.StatusCode != http.StatusOK {
+		loginResp.Body.Close()
+		t.Fatalf("expected 200 OK for login, got %d", loginResp.StatusCode)
+	}
+	var loginData identity.LoginResponse
+	_ = json.NewDecoder(loginResp.Body).Decode(&loginData)
+	loginResp.Body.Close()
+
+	// Attempt refresh without device fingerprint -> 401 Unauthorized
+	missingFpPayload := map[string]string{
+		"refresh_token": loginData.RefreshToken,
+	}
+	missingFpBody, _ := json.Marshal(missingFpPayload)
+	missingFpResp, err := http.Post(server.URL+"/v1/auth/refresh", "application/json", bytes.NewBuffer(missingFpBody))
+	if err != nil {
+		t.Fatalf("refresh request failed: %v", err)
+	}
+	missingFpResp.Body.Close()
+	if missingFpResp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("expected 401 Unauthorized for missing device fingerprint on bound session, got %d", missingFpResp.StatusCode)
+	}
+
+	// Attempt refresh with DIFFERENT Device B -> 401 Unauthorized
+	differentFpPayload := map[string]string{
+		"refresh_token":      loginData.RefreshToken,
+		"device_fingerprint": "device_fingerprint_B",
+	}
+	differentFpBody, _ := json.Marshal(differentFpPayload)
+	differentFpResp, err := http.Post(server.URL+"/v1/auth/refresh", "application/json", bytes.NewBuffer(differentFpBody))
+	if err != nil {
+		t.Fatalf("refresh request failed: %v", err)
+	}
+	differentFpResp.Body.Close()
+	if differentFpResp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("expected 401 Unauthorized for mismatched device fingerprint, got %d", differentFpResp.StatusCode)
+	}
+
+	// Refresh with matching Device A -> 200 OK
+	matchingFpPayload := map[string]string{
+		"refresh_token":      loginData.RefreshToken,
+		"device_fingerprint": "device_fingerprint_A",
+	}
+	matchingFpBody, _ := json.Marshal(matchingFpPayload)
+	matchingFpResp, err := http.Post(server.URL+"/v1/auth/refresh", "application/json", bytes.NewBuffer(matchingFpBody))
+	if err != nil {
+		t.Fatalf("refresh request failed: %v", err)
+	}
+	defer matchingFpResp.Body.Close()
+	if matchingFpResp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 OK for matching device fingerprint refresh, got %d", matchingFpResp.StatusCode)
+	}
+}
