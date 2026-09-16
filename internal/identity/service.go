@@ -125,9 +125,11 @@ func (s *Service) Register(ctx context.Context, req RegisterRequest) (*RegisterR
 		EventType:        "identity.user_registered.v1",
 		SchemaVersion:    1,
 		Payload: map[string]any{
-			"user_id": user.ID,
-			"email":   user.Email,
-			"status":  string(user.Status),
+			"user_id":                user.ID,
+			"email":                  user.Email,
+			"status":                 string(user.Status),
+			"accepted_terms_version": req.AcceptedTermsVersion,
+			"accepted_terms_at":      now.Format(time.RFC3339),
 		},
 		OccurredAt: now,
 	}
@@ -160,6 +162,16 @@ func (s *Service) Login(ctx context.Context, req LoginRequest) (*LoginResponse, 
 		return nil, err
 	}
 
+	if user.Status == domain.UserStatusLocked && !user.IsLocked(now) {
+		if user.PreLockoutStatus != "" {
+			user.Status = user.PreLockoutStatus
+		} else {
+			user.Status = domain.UserStatusActive
+		}
+		user.PreLockoutStatus = ""
+		user.LockedUntil = nil
+	}
+
 	if user.Status == domain.UserStatusDisabled {
 		_ = s.repo.RecordSecurityEvent(ctx, user.ID, "identity.login_failed.v1", "BLOCKED", req.RequestID, req.RequestIP, map[string]any{"reason": "disabled"})
 		return nil, ErrAccountDisabled
@@ -190,6 +202,16 @@ func (s *Service) Login(ctx context.Context, req LoginRequest) (*LoginResponse, 
 		return nil, err
 	}
 
+	var deviceIDPtr *string
+	if strings.TrimSpace(req.DeviceFingerprint) != "" {
+		fpHash := security.HashToken(req.DeviceFingerprint)
+		devID, err := s.repo.GetOrCreateDevice(ctx, user.ID, fpHash, req.UserAgent, req.RequestIP)
+		if err != nil {
+			return nil, err
+		}
+		deviceIDPtr = &devID
+	}
+
 	familyID := uuid.New().String()
 	family, err := domain.NewRefreshFamily(familyID, user.ID, now)
 	if err != nil {
@@ -208,6 +230,7 @@ func (s *Service) Login(ctx context.Context, req LoginRequest) (*LoginResponse, 
 	sessionInput := domain.SessionInput{
 		ID:               sessionID,
 		UserID:           user.ID,
+		DeviceID:         deviceIDPtr,
 		RefreshFamilyID:  familyID,
 		AccessTokenJTI:   jti,
 		RefreshTokenHash: hex.EncodeToString(refreshTokenHash),
@@ -262,13 +285,43 @@ func (s *Service) RefreshSession(ctx context.Context, req RefreshRequest) (*Logi
 
 	// Token reuse detection
 	if agg.Family.IsRevoked() || agg.Session.RevokedAt != nil {
-		_ = s.repo.RevokeRefreshFamily(ctx, agg.Family.ID, "reuse_detected")
+		if revokeErr := s.repo.RevokeRefreshFamily(ctx, agg.Family.ID, "reuse_detected"); revokeErr != nil {
+			return nil, revokeErr
+		}
 		_ = s.repo.RecordSecurityEvent(ctx, agg.Session.UserID, "identity.refresh_reuse_detected.v1", "BLOCKED", req.RequestID, req.RequestIP, map[string]any{"family_id": agg.Family.ID})
 		return nil, ErrTokenRevoked
 	}
 
+	user, err := s.repo.GetUserByID(ctx, agg.Session.UserID)
+	if err != nil {
+		if errors.Is(err, ErrUserNotFound) {
+			return nil, ErrInvalidCredentials
+		}
+		return nil, err
+	}
+
+	if user.Status == domain.UserStatusDisabled {
+		return nil, ErrAccountDisabled
+	}
+	if user.IsLocked(now) {
+		return nil, ErrAccountLocked
+	}
+
 	if agg.Session.IsExpired(now) {
 		return nil, ErrTokenExpired
+	}
+
+	var deviceIDPtr *string
+	if agg.Session.DeviceID != nil {
+		deviceIDPtr = agg.Session.DeviceID
+	}
+	if strings.TrimSpace(req.DeviceFingerprint) != "" {
+		fpHash := security.HashToken(req.DeviceFingerprint)
+		devID, err := s.repo.GetOrCreateDevice(ctx, user.ID, fpHash, req.UserAgent, req.RequestIP)
+		if err != nil {
+			return nil, err
+		}
+		deviceIDPtr = &devID
 	}
 
 	nextRefreshTokenBytes := make([]byte, 32)
@@ -284,6 +337,7 @@ func (s *Service) RefreshSession(ctx context.Context, req RefreshRequest) (*Logi
 	replacement := domain.SessionInput{
 		ID:               nextSessionID,
 		UserID:           agg.Session.UserID,
+		DeviceID:         deviceIDPtr,
 		RefreshFamilyID:  agg.Family.ID,
 		AccessTokenJTI:   nextJTI,
 		RefreshTokenHash: hex.EncodeToString(nextRefreshTokenHash),
@@ -299,6 +353,13 @@ func (s *Service) RefreshSession(ctx context.Context, req RefreshRequest) (*Logi
 	}
 
 	if err := s.repo.RotateSession(ctx, oldSessionID, agg, rotatedSession); err != nil {
+		if errors.Is(err, ErrSessionAlreadyRevoked) {
+			if revokeErr := s.repo.RevokeRefreshFamily(ctx, agg.Family.ID, "reuse_detected"); revokeErr != nil {
+				return nil, revokeErr
+			}
+			_ = s.repo.RecordSecurityEvent(ctx, agg.Session.UserID, "identity.refresh_reuse_detected.v1", "BLOCKED", req.RequestID, req.RequestIP, map[string]any{"family_id": agg.Family.ID})
+			return nil, ErrTokenRevoked
+		}
 		return nil, err
 	}
 
