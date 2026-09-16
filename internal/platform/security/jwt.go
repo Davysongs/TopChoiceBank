@@ -31,6 +31,7 @@ type TokenPair struct {
 	SessionID    string
 }
 
+// GenerateAccessToken creates an HMAC-SHA256 access token for a user.
 func GenerateAccessToken(secret string, userID string, jti string, now time.Time, duration time.Duration) (string, error) {
 	if secret == "" {
 		return "", errors.New("jwt secret is required")
@@ -71,6 +72,7 @@ func GenerateAccessToken(secret string, userID string, jti string, now time.Time
 	return fmt.Sprintf("%s.%s", unsignedToken, signature), nil
 }
 
+// VerifyAccessToken validates an access token's signature, claims, and expiration.
 func VerifyAccessToken(secret string, tokenStr string, now time.Time) (*JWTClaims, error) {
 	if secret == "" {
 		return nil, errors.New("jwt secret is required")
@@ -107,6 +109,7 @@ func VerifyAccessToken(secret string, tokenStr string, now time.Time) (*JWTClaim
 	return &claims, nil
 }
 
+// HashToken returns the SHA-256 digest of token.
 func HashToken(token string) []byte {
 	hash := sha256.Sum256([]byte(token))
 	return hash[:]

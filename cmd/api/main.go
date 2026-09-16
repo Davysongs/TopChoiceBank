@@ -13,6 +13,7 @@ import (
 	"github.com/Davysongs/TopChoiceBank/internal/platform/logging"
 )
 
+// main configures and runs the API process until it receives a shutdown signal.
 func main() {
 	cfg, err := config.Load()
 	if err != nil {

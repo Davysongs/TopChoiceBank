@@ -16,12 +16,14 @@ type ProblemDetails struct {
 	Instance string `json:"instance"`
 }
 
+// writeJSON writes data as a JSON response with the supplied status code.
 func writeJSON(w http.ResponseWriter, status int, data any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(data)
 }
 
+// writeProblem writes an RFC 9457-style problem response.
 func writeProblem(w http.ResponseWriter, status int, title string, detail string, instance string) {
 	prob := ProblemDetails{
 		Type:     "about:blank",
@@ -33,6 +35,7 @@ func writeProblem(w http.ResponseWriter, status int, title string, detail string
 	writeJSON(w, status, prob)
 }
 
+// RegisterAuthRoutes registers the identity authentication endpoints on router.
 func RegisterAuthRoutes(router *Router, service *identity.Service) {
 	router.HandleFunc("/v1/auth/register", handleRegister(service))
 	router.HandleFunc("/v1/auth/login", handleLogin(service))
@@ -41,6 +44,7 @@ func RegisterAuthRoutes(router *Router, service *identity.Service) {
 
 const maxAuthRequestBodyBytes = 65536
 
+// handleRegister handles customer registration requests.
 func handleRegister(service *identity.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
@@ -73,6 +77,7 @@ func handleRegister(service *identity.Service) http.HandlerFunc {
 	}
 }
 
+// handleLogin handles credential-based login requests.
 func handleLogin(service *identity.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
@@ -109,6 +114,7 @@ func handleLogin(service *identity.Service) http.HandlerFunc {
 	}
 }
 
+// handleRefresh handles refresh-token rotation requests.
 func handleRefresh(service *identity.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {

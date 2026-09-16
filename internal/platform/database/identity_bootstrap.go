@@ -14,6 +14,7 @@ import (
 //go:embed migrations/*.sql
 var migrationFiles embed.FS
 
+// ApplyIdentityBootstrapMigrations applies all embedded identity migrations in order.
 func ApplyIdentityBootstrapMigrations(ctx context.Context, db *sql.DB) error {
 	if db == nil {
 		return errors.New("database pool is required")
@@ -22,6 +23,7 @@ func ApplyIdentityBootstrapMigrations(ctx context.Context, db *sql.DB) error {
 	return applyMigrationsFromEmbeddedFiles(ctx, db, "", migrationFiles)
 }
 
+// applyMigrationsFromEmbeddedFiles applies matching embedded SQL migration files in name order.
 func applyMigrationsFromEmbeddedFiles(ctx context.Context, db *sql.DB, prefix string, source fs.FS) error {
 	entries, err := fs.ReadDir(source, "migrations")
 	if err != nil {

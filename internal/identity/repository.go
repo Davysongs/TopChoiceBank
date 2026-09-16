@@ -35,10 +35,12 @@ type PostgresRepository struct {
 	db *sql.DB
 }
 
+// NewPostgresRepository creates an identity repository backed by db.
 func NewPostgresRepository(db *sql.DB) *PostgresRepository {
 	return &PostgresRepository{db: db}
 }
 
+// CreateUserWithOutbox persists a user, its default role, and an outbox event atomically.
 func (r *PostgresRepository) CreateUserWithOutbox(ctx context.Context, user *domain.User, outboxEvent platformdb.OutboxEventInput) error {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -89,6 +91,7 @@ func (r *PostgresRepository) CreateUserWithOutbox(ctx context.Context, user *dom
 	return tx.Commit()
 }
 
+// GetUserByEmail retrieves a user by their normalized email address.
 func (r *PostgresRepository) GetUserByEmail(ctx context.Context, email string) (*domain.User, error) {
 	query := `
 		SELECT id, email, password_hash, password_hash_algorithm, status,
@@ -126,6 +129,7 @@ func (r *PostgresRepository) GetUserByEmail(ctx context.Context, email string) (
 	return &u, nil
 }
 
+// GetUserByID retrieves a user by ID.
 func (r *PostgresRepository) GetUserByID(ctx context.Context, id string) (*domain.User, error) {
 	query := `
 		SELECT id, email, password_hash, password_hash_algorithm, status,
@@ -163,6 +167,7 @@ func (r *PostgresRepository) GetUserByID(ctx context.Context, id string) (*domai
 	return &u, nil
 }
 
+// UpdateUserStatusAndLockout persists a user's authentication status using optimistic concurrency.
 func (r *PostgresRepository) UpdateUserStatusAndLockout(ctx context.Context, user *domain.User) error {
 	query := `
 		UPDATE identity.users
@@ -199,6 +204,7 @@ func (r *PostgresRepository) UpdateUserStatusAndLockout(ctx context.Context, use
 	return nil
 }
 
+// CreateSessionAndFamily persists a refresh-token family and its initial session atomically.
 func (r *PostgresRepository) CreateSessionAndFamily(ctx context.Context, family *domain.RefreshFamily, session *domain.Session) error {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -259,6 +265,7 @@ func (r *PostgresRepository) CreateSessionAndFamily(ctx context.Context, family 
 	return tx.Commit()
 }
 
+// GetSessionAndFamilyByRefreshTokenHash retrieves a session and its refresh-token family.
 func (r *PostgresRepository) GetSessionAndFamilyByRefreshTokenHash(ctx context.Context, refreshHash []byte) (*domain.SessionAggregate, error) {
 	query := `
 		SELECT s.id, s.user_id, s.device_id, s.refresh_family_id, s.access_token_jti,
@@ -310,6 +317,7 @@ func (r *PostgresRepository) GetSessionAndFamilyByRefreshTokenHash(ctx context.C
 	return domain.NewSessionAggregate(&f, &s)
 }
 
+// RotateSession revokes an existing session and stores its replacement atomically.
 func (r *PostgresRepository) RotateSession(ctx context.Context, oldSessionID string, agg *domain.SessionAggregate, rotatedSession *domain.Session) error {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -380,6 +388,7 @@ func (r *PostgresRepository) RotateSession(ctx context.Context, oldSessionID str
 	return tx.Commit()
 }
 
+// RevokeRefreshFamily revokes a refresh-token family and all of its active sessions.
 func (r *PostgresRepository) RevokeRefreshFamily(ctx context.Context, familyID string, reason string) error {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -412,6 +421,7 @@ func (r *PostgresRepository) RevokeRefreshFamily(ctx context.Context, familyID s
 	return tx.Commit()
 }
 
+// RecordSecurityEvent stores an identity-related security audit event.
 func (r *PostgresRepository) RecordSecurityEvent(ctx context.Context, userID string, eventType string, outcome string, requestID string, sourceIP string, metadata map[string]any) error {
 	metadataBytes, err := json.Marshal(metadata)
 	if err != nil {

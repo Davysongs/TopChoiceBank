@@ -5,6 +5,7 @@ import (
 	"time"
 )
 
+// TestGenerateAndVerifyAccessToken verifies that a generated token round-trips successfully.
 func TestGenerateAndVerifyAccessToken(t *testing.T) {
 	secret := "test-secret-key-32-bytes-long!!"
 	userID := "user-123"
@@ -29,6 +30,7 @@ func TestGenerateAndVerifyAccessToken(t *testing.T) {
 	}
 }
 
+// TestVerifyAccessTokenExpired verifies that expired access tokens are rejected.
 func TestVerifyAccessTokenExpired(t *testing.T) {
 	secret := "test-secret-key-32-bytes-long!!"
 	now := time.Now().UTC()

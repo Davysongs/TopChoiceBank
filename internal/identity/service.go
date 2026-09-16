@@ -80,6 +80,7 @@ type Service struct {
 	hasher    domain.PasswordHasher
 }
 
+// NewService creates an identity service with the supplied repository and JWT secret.
 func NewService(repo Repository, jwtSecret string) *Service {
 	return &Service{
 		repo:      repo,
@@ -88,6 +89,7 @@ func NewService(repo Repository, jwtSecret string) *Service {
 	}
 }
 
+// Register validates a registration request and creates a pending customer account.
 func (s *Service) Register(ctx context.Context, req RegisterRequest) (*RegisterResponse, error) {
 	email := strings.ToLower(strings.TrimSpace(req.Email))
 	if email == "" {
@@ -141,6 +143,7 @@ func (s *Service) Register(ctx context.Context, req RegisterRequest) (*RegisterR
 	}, nil
 }
 
+// Login authenticates a user and starts a refresh-token session.
 func (s *Service) Login(ctx context.Context, req LoginRequest) (*LoginResponse, error) {
 	email := strings.ToLower(strings.TrimSpace(req.Email))
 	if email == "" || req.Password == "" {
@@ -239,6 +242,7 @@ func (s *Service) Login(ctx context.Context, req LoginRequest) (*LoginResponse, 
 	}, nil
 }
 
+// RefreshSession rotates a valid refresh token and issues a new token pair.
 func (s *Service) RefreshSession(ctx context.Context, req RefreshRequest) (*LoginResponse, error) {
 	if strings.TrimSpace(req.RefreshToken) == "" {
 		return nil, ErrInvalidCredentials
@@ -312,6 +316,7 @@ func (s *Service) RefreshSession(ctx context.Context, req RefreshRequest) (*Logi
 	}, nil
 }
 
+// formatIP normalizes a request address for storage as an IP value.
 func formatIP(ip string) string {
 	ip = strings.TrimSpace(ip)
 	if ip == "" {
@@ -323,6 +328,7 @@ func formatIP(ip string) string {
 	return ip
 }
 
+// formatUserAgent normalizes and bounds a user-agent value for storage.
 func formatUserAgent(ua string) string {
 	ua = strings.TrimSpace(ua)
 	if ua == "" {

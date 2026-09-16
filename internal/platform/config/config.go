@@ -33,6 +33,7 @@ type Config struct {
 	JWTSecret               string
 }
 
+// Load reads and validates the application configuration from the environment.
 func Load() (Config, error) {
 	cfg := Config{
 		AppEnvironment:          getEnv("APP_ENV", "development"),

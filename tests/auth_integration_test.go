@@ -21,6 +21,7 @@ import (
 	"github.com/Davysongs/TopChoiceBank/internal/platform/security"
 )
 
+// setupTestServer creates a migrated database and an HTTP server for authentication tests.
 func setupTestServer(t *testing.T) (*httptest.Server, *sql.DB) {
 	t.Helper()
 
@@ -62,6 +63,7 @@ func setupTestServer(t *testing.T) (*httptest.Server, *sql.DB) {
 	return server, db
 }
 
+// TestRegistrationAndOutboxEmission verifies registration persistence and event emission.
 func TestRegistrationAndOutboxEmission(t *testing.T) {
 	server, db := setupTestServer(t)
 	defer server.Close()
@@ -132,6 +134,7 @@ func TestRegistrationAndOutboxEmission(t *testing.T) {
 	}
 }
 
+// TestAccountLockoutPolicyAfterFiveFailedAttempts verifies the failed-login lockout policy.
 func TestAccountLockoutPolicyAfterFiveFailedAttempts(t *testing.T) {
 	server, db := setupTestServer(t)
 	defer server.Close()
@@ -212,6 +215,7 @@ func TestAccountLockoutPolicyAfterFiveFailedAttempts(t *testing.T) {
 	}
 }
 
+// TestRefreshTokenRotationAndReuseRevocation verifies rotation and refresh-token reuse handling.
 func TestRefreshTokenRotationAndReuseRevocation(t *testing.T) {
 	server, db := setupTestServer(t)
 	defer server.Close()

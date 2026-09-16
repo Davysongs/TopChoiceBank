@@ -19,6 +19,7 @@ type OutboxEventInput struct {
 	OccurredAt       time.Time
 }
 
+// AppendOutboxEvent adds a domain event to the transactional outbox.
 func AppendOutboxEvent(ctx context.Context, tx *sql.Tx, input OutboxEventInput) error {
 	if tx == nil {
 		return fmt.Errorf("transaction is required to append outbox event")
