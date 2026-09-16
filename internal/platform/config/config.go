@@ -16,6 +16,7 @@ const (
 	defaultDatabaseMaxOpenConns     = 25
 	defaultDatabaseMaxIdleConns     = 5
 	defaultDatabaseConnLifetime     = 5 * time.Minute
+	defaultJWTSecret                = "topchoicebank-default-development-jwt-secret-key-32bytes"
 )
 
 type Config struct {
@@ -29,8 +30,10 @@ type Config struct {
 	DatabaseMaxOpenConns    int
 	DatabaseMaxIdleConns    int
 	DatabaseConnMaxLifetime time.Duration
+	JWTSecret               string
 }
 
+// Load reads and validates the application configuration from the environment.
 func Load() (Config, error) {
 	cfg := Config{
 		AppEnvironment:          getEnv("APP_ENV", "development"),
@@ -44,6 +47,16 @@ func Load() (Config, error) {
 		DatabaseMaxIdleConns:    getInt("DATABASE_MAX_IDLE_CONNS", defaultDatabaseMaxIdleConns),
 		DatabaseConnMaxLifetime: time.Second * time.Duration(getInt("DATABASE_CONN_MAX_LIFETIME_SECONDS", int(defaultDatabaseConnLifetime.Seconds()))),
 	}
+
+	jwtSecret := strings.TrimSpace(os.Getenv("JWT_SECRET"))
+	if jwtSecret == "" {
+		if cfg.AppEnvironment == "development" {
+			jwtSecret = defaultJWTSecret
+		} else {
+			return Config{}, fmt.Errorf("missing required JWT_SECRET in non-development environment")
+		}
+	}
+	cfg.JWTSecret = jwtSecret
 
 	if cfg.DatabaseURL == "" {
 		return Config{}, fmt.Errorf("missing required DATABASE_URL")

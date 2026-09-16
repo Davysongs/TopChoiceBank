@@ -37,9 +37,10 @@ func TestUserLockoutWindowResetsAndLocks(t *testing.T) {
 	}
 }
 
+// TestUserLockoutPreservesPriorStatus verifies that lockout expiry restores the user's prior status.
 func TestUserLockoutPreservesPriorStatus(t *testing.T) {
 	clock := time.Date(2026, 9, 13, 12, 0, 0, 0, time.UTC)
-	
+
 	// Pending status preservation
 	userPending, err := NewUser("u1", "pending@example.com", "hash", clock)
 	if err != nil {
