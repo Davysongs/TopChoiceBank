@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/Davysongs/TopChoiceBank/internal/identity/domain"
 	platformdb "github.com/Davysongs/TopChoiceBank/internal/platform/database"
@@ -452,7 +453,7 @@ func (r *PostgresRepository) GetOrCreateDevice(ctx context.Context, userID strin
 
 	query := `
 		INSERT INTO identity.devices (
-			user_id, fingerprint_hash, display_name, created_at, last_seen_at, last_ip
+			user_id, fingerprint_hash, display_name, first_seen_at, last_seen_at, last_ip
 		) VALUES ($1, $2, $3, clock_timestamp(), clock_timestamp(), NULLIF($4, '')::inet)
 		ON CONFLICT (user_id, fingerprint_hash) DO UPDATE
 		SET last_seen_at = clock_timestamp(),

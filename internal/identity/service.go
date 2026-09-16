@@ -205,7 +205,7 @@ func (s *Service) Login(ctx context.Context, req LoginRequest) (*LoginResponse, 
 	var deviceIDPtr *string
 	if strings.TrimSpace(req.DeviceFingerprint) != "" {
 		fpHash := security.HashToken(req.DeviceFingerprint)
-		devID, err := s.repo.GetOrCreateDevice(ctx, user.ID, fpHash, req.UserAgent, req.RequestIP)
+		devID, err := s.repo.GetOrCreateDevice(ctx, user.ID, fpHash, req.UserAgent, formatIP(req.RequestIP))
 		if err != nil {
 			return nil, err
 		}
@@ -317,7 +317,7 @@ func (s *Service) RefreshSession(ctx context.Context, req RefreshRequest) (*Logi
 	}
 	if strings.TrimSpace(req.DeviceFingerprint) != "" {
 		fpHash := security.HashToken(req.DeviceFingerprint)
-		devID, err := s.repo.GetOrCreateDevice(ctx, user.ID, fpHash, req.UserAgent, req.RequestIP)
+		devID, err := s.repo.GetOrCreateDevice(ctx, user.ID, fpHash, req.UserAgent, formatIP(req.RequestIP))
 		if err != nil {
 			return nil, err
 		}
