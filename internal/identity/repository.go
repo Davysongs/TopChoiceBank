@@ -13,10 +13,11 @@ import (
 )
 
 var (
-	ErrUserNotFound    = errors.New("user not found")
-	ErrDuplicateEmail  = errors.New("email already registered")
-	ErrSessionNotFound = errors.New("session not found")
-	ErrFamilyNotFound  = errors.New("refresh family not found")
+	ErrUserNotFound          = errors.New("user not found")
+	ErrDuplicateEmail        = errors.New("email already registered")
+	ErrSessionNotFound       = errors.New("session not found")
+	ErrFamilyNotFound        = errors.New("refresh family not found")
+	ErrSessionAlreadyRevoked = errors.New("session already revoked or rotated")
 )
 
 type Repository interface {
@@ -29,6 +30,7 @@ type Repository interface {
 	RotateSession(ctx context.Context, oldSessionID string, agg *domain.SessionAggregate, rotatedSession *domain.Session) error
 	RevokeRefreshFamily(ctx context.Context, familyID string, reason string) error
 	RecordSecurityEvent(ctx context.Context, userID string, eventType string, outcome string, requestID string, sourceIP string, metadata map[string]any) error
+	GetOrCreateDevice(ctx context.Context, userID string, fingerprintHash []byte, userAgent string, ip string) (string, error)
 }
 
 type PostgresRepository struct {
@@ -340,7 +342,7 @@ func (r *PostgresRepository) RotateSession(ctx context.Context, oldSessionID str
 		return fmt.Errorf("failed to revoke rotated session: %w", err)
 	}
 	if rows == 0 {
-		return fmt.Errorf("failed to revoke rotated session: %w", fmt.Errorf("zero rows affected"))
+		return ErrSessionAlreadyRevoked
 	}
 
 	// Insert new session
@@ -437,4 +439,31 @@ func (r *PostgresRepository) RecordSecurityEvent(ctx context.Context, userID str
 	`
 	_, err = r.db.ExecContext(ctx, query, userID, eventType, outcome, requestID, sourceIP, metadataBytes)
 	return err
+}
+
+func (r *PostgresRepository) GetOrCreateDevice(ctx context.Context, userID string, fingerprintHash []byte, userAgent string, ip string) (string, error) {
+	displayName := strings.TrimSpace(userAgent)
+	if len(displayName) > 120 {
+		displayName = displayName[:120]
+	}
+	if displayName == "" {
+		displayName = "Unknown Device"
+	}
+
+	query := `
+		INSERT INTO identity.devices (
+			user_id, fingerprint_hash, display_name, created_at, last_seen_at, last_ip
+		) VALUES ($1, $2, $3, clock_timestamp(), clock_timestamp(), NULLIF($4, '')::inet)
+		ON CONFLICT (user_id, fingerprint_hash) DO UPDATE
+		SET last_seen_at = clock_timestamp(),
+		    last_ip = COALESCE(EXCLUDED.last_ip, identity.devices.last_ip),
+		    updated_at = clock_timestamp()
+		RETURNING id
+	`
+	var id string
+	err := r.db.QueryRowContext(ctx, query, userID, fingerprintHash, displayName, ip).Scan(&id)
+	if err != nil {
+		return "", fmt.Errorf("failed to get or create device: %w", err)
+	}
+	return id, nil
 }
