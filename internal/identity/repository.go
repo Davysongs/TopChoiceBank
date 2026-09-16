@@ -343,7 +343,6 @@ func (r *PostgresRepository) RotateSession(ctx context.Context, oldSessionID str
 		return fmt.Errorf("failed to revoke rotated session: %w", err)
 	}
 	if rows == 0 {
-		return fmt.Errorf("failed to revoke rotated session: %w", fmt.Errorf("zero rows affected"))
 		return ErrSessionAlreadyRevoked
 	}
 
