@@ -125,9 +125,6 @@ func (s *Service) Register(ctx context.Context, req RegisterRequest) (*RegisterR
 		EventType:        "identity.user_registered.v1",
 		SchemaVersion:    1,
 		Payload: map[string]any{
-			"user_id": user.ID,
-			"email":   user.Email,
-			"status":  string(user.Status),
 			"user_id":                user.ID,
 			"email":                  user.Email,
 			"status":                 string(user.Status),
