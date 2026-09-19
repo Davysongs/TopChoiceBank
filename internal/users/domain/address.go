@@ -150,3 +150,4 @@ func (a Address) Equals(other Address) bool {
 		a.postalCode == other.postalCode &&
 		a.countryCode == other.countryCode
 }
+

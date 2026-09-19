@@ -32,3 +32,4 @@ var (
 	ErrInvalidOnboardingTransition = errors.New("invalid onboarding state transition")
 	ErrProfileAlreadyDecided       = errors.New("profile onboarding decision is terminal")
 )
+

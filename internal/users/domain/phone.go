@@ -56,3 +56,4 @@ func (p Phone) Masked() string {
 func (p Phone) Equals(other Phone) bool {
 	return p.value == other.value
 }
+

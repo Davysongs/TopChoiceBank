@@ -58,3 +58,4 @@ func (l LegalName) String() string {
 func (l LegalName) Equals(other LegalName) bool {
 	return l.givenName == other.givenName && l.familyName == other.familyName
 }
+

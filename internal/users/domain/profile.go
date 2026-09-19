@@ -252,3 +252,4 @@ func (p *Profile) UpdateAddress(address Address, now time.Time) error {
 	p.version++
 	return nil
 }
+

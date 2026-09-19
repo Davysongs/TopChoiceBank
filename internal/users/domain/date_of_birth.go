@@ -107,3 +107,4 @@ func (d DateOfBirth) IsAdult(at time.Time) bool {
 func (d DateOfBirth) Equals(other DateOfBirth) bool {
 	return d.year == other.year && d.month == other.month && d.day == other.day
 }
+

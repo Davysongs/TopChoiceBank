@@ -165,3 +165,4 @@ func TestLegalName_Equals(t *testing.T) {
 		t.Errorf("expected ln1 not to equal ln4")
 	}
 }
+

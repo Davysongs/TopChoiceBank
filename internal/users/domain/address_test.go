@@ -209,3 +209,4 @@ func TestAddress_Equals(t *testing.T) {
 		t.Errorf("expected a1 not to equal a3")
 	}
 }
+
