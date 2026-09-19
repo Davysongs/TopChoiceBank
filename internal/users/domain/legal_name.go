@@ -59,3 +59,8 @@ func (l LegalName) Equals(other LegalName) bool {
 	return l.givenName == other.givenName && l.familyName == other.familyName
 }
 
+// IsZero returns true if the LegalName is an uninitialized zero value.
+func (l LegalName) IsZero() bool {
+	return l.givenName == "" && l.familyName == ""
+}
+

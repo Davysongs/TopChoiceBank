@@ -32,6 +32,14 @@ type Profile struct {
 	updatedAt             time.Time
 }
 
+func cloneTime(t *time.Time) *time.Time {
+	if t == nil {
+		return nil
+	}
+	cp := *t
+	return &cp
+}
+
 // NewProfile creates a new customer Profile aggregate in the initial PENDING onboarding state.
 func NewProfile(
 	userID string,
@@ -44,6 +52,18 @@ func NewProfile(
 	trimmedUserID := strings.TrimSpace(userID)
 	if trimmedUserID == "" {
 		return nil, ErrEmptyUserID
+	}
+	if legalName.IsZero() {
+		return nil, ErrInvalidGivenName
+	}
+	if dob.IsZero() {
+		return nil, ErrInvalidDateOfBirth
+	}
+	if phone.IsZero() {
+		return nil, ErrInvalidPhoneNumber
+	}
+	if address.IsZero() {
+		return nil, ErrEmptyAddressLine1
 	}
 
 	if now.IsZero() {
@@ -82,19 +102,33 @@ func ReconstituteProfile(
 	if trimmedUserID == "" {
 		return nil, ErrEmptyUserID
 	}
+	if legalName.IsZero() {
+		return nil, ErrInvalidGivenName
+	}
+	if dob.IsZero() {
+		return nil, ErrInvalidDateOfBirth
+	}
+	if phone.IsZero() {
+		return nil, ErrInvalidPhoneNumber
+	}
+	if address.IsZero() {
+		return nil, ErrEmptyAddressLine1
+	}
 
 	switch onboardingState {
-	case OnboardingStatePending, OnboardingStateUnderReview:
+	case OnboardingStatePending:
+		if submittedAt != nil || decidedAt != nil {
+			return nil, ErrInvalidOnboardingTransition
+		}
+	case OnboardingStateUnderReview:
+		if submittedAt == nil || decidedAt != nil {
+			return nil, ErrInvalidOnboardingTransition
+		}
 	case OnboardingStateApproved, OnboardingStateRejected:
-		if decidedAt == nil {
+		if submittedAt == nil || decidedAt == nil {
 			return nil, ErrInvalidOnboardingTransition
 		}
 	default:
-		return nil, ErrInvalidOnboardingTransition
-	}
-
-	// Database invariant: CHECK (onboarding_decided_at IS NULL OR onboarding_submitted_at IS NOT NULL)
-	if decidedAt != nil && submittedAt == nil {
 		return nil, ErrInvalidOnboardingTransition
 	}
 
@@ -105,8 +139,8 @@ func ReconstituteProfile(
 		phone:                 phone,
 		address:               address,
 		onboardingState:       onboardingState,
-		onboardingSubmittedAt: submittedAt,
-		onboardingDecidedAt:   decidedAt,
+		onboardingSubmittedAt: cloneTime(submittedAt),
+		onboardingDecidedAt:   cloneTime(decidedAt),
 		version:               version,
 		createdAt:             createdAt,
 		updatedAt:             updatedAt,
@@ -143,14 +177,14 @@ func (p *Profile) OnboardingState() OnboardingState {
 	return p.onboardingState
 }
 
-// OnboardingSubmittedAt returns the timestamp when onboarding was submitted for review.
+// OnboardingSubmittedAt returns a copy of the timestamp when onboarding was submitted for review.
 func (p *Profile) OnboardingSubmittedAt() *time.Time {
-	return p.onboardingSubmittedAt
+	return cloneTime(p.onboardingSubmittedAt)
 }
 
-// OnboardingDecidedAt returns the timestamp when onboarding reached a terminal decision.
+// OnboardingDecidedAt returns a copy of the timestamp when onboarding reached a terminal decision.
 func (p *Profile) OnboardingDecidedAt() *time.Time {
-	return p.onboardingDecidedAt
+	return cloneTime(p.onboardingDecidedAt)
 }
 
 // Version returns the optimistic concurrency control version.
@@ -182,8 +216,9 @@ func (p *Profile) SubmitOnboarding(now time.Time) error {
 		now = time.Now().UTC()
 	}
 
+	subTime := now
 	p.onboardingState = OnboardingStateUnderReview
-	p.onboardingSubmittedAt = &now
+	p.onboardingSubmittedAt = &subTime
 	p.onboardingDecidedAt = nil
 	p.updatedAt = now
 	p.version++
@@ -201,8 +236,9 @@ func (p *Profile) ApproveOnboarding(now time.Time) error {
 		now = time.Now().UTC()
 	}
 
+	decTime := now
 	p.onboardingState = OnboardingStateApproved
-	p.onboardingDecidedAt = &now
+	p.onboardingDecidedAt = &decTime
 	p.updatedAt = now
 	p.version++
 	return nil
@@ -219,8 +255,9 @@ func (p *Profile) RejectOnboarding(now time.Time) error {
 		now = time.Now().UTC()
 	}
 
+	decTime := now
 	p.onboardingState = OnboardingStateRejected
-	p.onboardingDecidedAt = &now
+	p.onboardingDecidedAt = &decTime
 	p.updatedAt = now
 	p.version++
 	return nil
@@ -228,6 +265,13 @@ func (p *Profile) RejectOnboarding(now time.Time) error {
 
 // UpdateContact updates mutable contact fields (phone and address) using optimistic locking.
 func (p *Profile) UpdateContact(phone Phone, address Address, now time.Time) error {
+	if phone.IsZero() {
+		return ErrInvalidPhoneNumber
+	}
+	if address.IsZero() {
+		return ErrEmptyAddressLine1
+	}
+
 	if now.IsZero() {
 		now = time.Now().UTC()
 	}
@@ -241,6 +285,10 @@ func (p *Profile) UpdateContact(phone Phone, address Address, now time.Time) err
 
 // UpdatePhone updates the customer's phone number and advances version.
 func (p *Profile) UpdatePhone(phone Phone, now time.Time) error {
+	if phone.IsZero() {
+		return ErrInvalidPhoneNumber
+	}
+
 	if now.IsZero() {
 		now = time.Now().UTC()
 	}
@@ -253,6 +301,10 @@ func (p *Profile) UpdatePhone(phone Phone, now time.Time) error {
 
 // UpdateAddress updates the customer's residential address and advances version.
 func (p *Profile) UpdateAddress(address Address, now time.Time) error {
+	if address.IsZero() {
+		return ErrEmptyAddressLine1
+	}
+
 	if now.IsZero() {
 		now = time.Now().UTC()
 	}

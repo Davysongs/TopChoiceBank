@@ -151,3 +151,8 @@ func (a Address) Equals(other Address) bool {
 		a.countryCode == other.countryCode
 }
 
+// IsZero returns true if the Address is an uninitialized zero value.
+func (a Address) IsZero() bool {
+	return a.line1 == "" && a.city == "" && a.countryCode == ""
+}
+

@@ -57,3 +57,8 @@ func (p Phone) Equals(other Phone) bool {
 	return p.value == other.value
 }
 
+// IsZero returns true if the Phone is an uninitialized zero value.
+func (p Phone) IsZero() bool {
+	return p.value == ""
+}
+

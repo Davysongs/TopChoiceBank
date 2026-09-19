@@ -95,6 +95,39 @@ func TestNewProfile_EmptyUserID(t *testing.T) {
 	}
 }
 
+func TestNewProfile_ZeroValueObjects(t *testing.T) {
+	name, dob, phone, addr := createTestFixtures(t)
+	now := time.Now().UTC()
+
+	t.Run("zero LegalName rejected", func(t *testing.T) {
+		_, err := domain.NewProfile("user-1", domain.LegalName{}, dob, phone, addr, now)
+		if !errors.Is(err, domain.ErrInvalidGivenName) {
+			t.Errorf("expected ErrInvalidGivenName, got %v", err)
+		}
+	})
+
+	t.Run("zero DateOfBirth rejected", func(t *testing.T) {
+		_, err := domain.NewProfile("user-1", name, domain.DateOfBirth{}, phone, addr, now)
+		if !errors.Is(err, domain.ErrInvalidDateOfBirth) {
+			t.Errorf("expected ErrInvalidDateOfBirth, got %v", err)
+		}
+	})
+
+	t.Run("zero Phone rejected", func(t *testing.T) {
+		_, err := domain.NewProfile("user-1", name, dob, domain.Phone{}, addr, now)
+		if !errors.Is(err, domain.ErrInvalidPhoneNumber) {
+			t.Errorf("expected ErrInvalidPhoneNumber, got %v", err)
+		}
+	})
+
+	t.Run("zero Address rejected", func(t *testing.T) {
+		_, err := domain.NewProfile("user-1", name, dob, phone, domain.Address{}, now)
+		if !errors.Is(err, domain.ErrEmptyAddressLine1) {
+			t.Errorf("expected ErrEmptyAddressLine1, got %v", err)
+		}
+	})
+}
+
 func TestReconstituteProfile(t *testing.T) {
 	name, dob, phone, addr := createTestFixtures(t)
 	now := time.Now().UTC()
@@ -126,6 +159,28 @@ func TestReconstituteProfile(t *testing.T) {
 		}
 	})
 
+	t.Run("zero value objects rejected", func(t *testing.T) {
+		_, err := domain.ReconstituteProfile("u", domain.LegalName{}, dob, phone, addr, domain.OnboardingStatePending, nil, nil, 1, now, now)
+		if !errors.Is(err, domain.ErrInvalidGivenName) {
+			t.Errorf("expected ErrInvalidGivenName, got %v", err)
+		}
+
+		_, err = domain.ReconstituteProfile("u", name, domain.DateOfBirth{}, phone, addr, domain.OnboardingStatePending, nil, nil, 1, now, now)
+		if !errors.Is(err, domain.ErrInvalidDateOfBirth) {
+			t.Errorf("expected ErrInvalidDateOfBirth, got %v", err)
+		}
+
+		_, err = domain.ReconstituteProfile("u", name, dob, domain.Phone{}, addr, domain.OnboardingStatePending, nil, nil, 1, now, now)
+		if !errors.Is(err, domain.ErrInvalidPhoneNumber) {
+			t.Errorf("expected ErrInvalidPhoneNumber, got %v", err)
+		}
+
+		_, err = domain.ReconstituteProfile("u", name, dob, phone, domain.Address{}, domain.OnboardingStatePending, nil, nil, 1, now, now)
+		if !errors.Is(err, domain.ErrEmptyAddressLine1) {
+			t.Errorf("expected ErrEmptyAddressLine1, got %v", err)
+		}
+	})
+
 	t.Run("invalid reconstitution: empty onboarding state", func(t *testing.T) {
 		_, err := domain.ReconstituteProfile(
 			"user-uuid-1234",
@@ -140,9 +195,6 @@ func TestReconstituteProfile(t *testing.T) {
 			now,
 			now,
 		)
-		if err == nil {
-			t.Fatal("expected error for empty onboarding state, got nil")
-		}
 		if !errors.Is(err, domain.ErrInvalidOnboardingTransition) {
 			t.Errorf("expected ErrInvalidOnboardingTransition, got %v", err)
 		}
@@ -162,11 +214,84 @@ func TestReconstituteProfile(t *testing.T) {
 			now,
 			now,
 		)
-		if err == nil {
-			t.Fatal("expected error for unknown onboarding state, got nil")
-		}
 		if !errors.Is(err, domain.ErrInvalidOnboardingTransition) {
 			t.Errorf("expected ErrInvalidOnboardingTransition, got %v", err)
+		}
+	})
+
+	t.Run("invalid reconstitution: pending with submittedAt", func(t *testing.T) {
+		_, err := domain.ReconstituteProfile(
+			"user-uuid-1234",
+			name,
+			dob,
+			phone,
+			addr,
+			domain.OnboardingStatePending,
+			&subTime,
+			nil,
+			1,
+			now,
+			now,
+		)
+		if !errors.Is(err, domain.ErrInvalidOnboardingTransition) {
+			t.Errorf("expected ErrInvalidOnboardingTransition for pending with submittedAt, got %v", err)
+		}
+	})
+
+	t.Run("invalid reconstitution: pending with decidedAt", func(t *testing.T) {
+		_, err := domain.ReconstituteProfile(
+			"user-uuid-1234",
+			name,
+			dob,
+			phone,
+			addr,
+			domain.OnboardingStatePending,
+			nil,
+			&decTime,
+			1,
+			now,
+			now,
+		)
+		if !errors.Is(err, domain.ErrInvalidOnboardingTransition) {
+			t.Errorf("expected ErrInvalidOnboardingTransition for pending with decidedAt, got %v", err)
+		}
+	})
+
+	t.Run("invalid reconstitution: under review without submittedAt", func(t *testing.T) {
+		_, err := domain.ReconstituteProfile(
+			"user-uuid-1234",
+			name,
+			dob,
+			phone,
+			addr,
+			domain.OnboardingStateUnderReview,
+			nil,
+			nil,
+			1,
+			now,
+			now,
+		)
+		if !errors.Is(err, domain.ErrInvalidOnboardingTransition) {
+			t.Errorf("expected ErrInvalidOnboardingTransition for under review without submittedAt, got %v", err)
+		}
+	})
+
+	t.Run("invalid reconstitution: under review with decidedAt", func(t *testing.T) {
+		_, err := domain.ReconstituteProfile(
+			"user-uuid-1234",
+			name,
+			dob,
+			phone,
+			addr,
+			domain.OnboardingStateUnderReview,
+			&subTime,
+			&decTime,
+			1,
+			now,
+			now,
+		)
+		if !errors.Is(err, domain.ErrInvalidOnboardingTransition) {
+			t.Errorf("expected ErrInvalidOnboardingTransition for under review with decidedAt, got %v", err)
 		}
 	})
 
@@ -184,9 +309,6 @@ func TestReconstituteProfile(t *testing.T) {
 			now,
 			now,
 		)
-		if err == nil {
-			t.Fatal("expected error for approved state without decidedAt, got nil")
-		}
 		if !errors.Is(err, domain.ErrInvalidOnboardingTransition) {
 			t.Errorf("expected ErrInvalidOnboardingTransition, got %v", err)
 		}
@@ -206,15 +328,12 @@ func TestReconstituteProfile(t *testing.T) {
 			now,
 			now,
 		)
-		if err == nil {
-			t.Fatal("expected error for rejected state without decidedAt, got nil")
-		}
 		if !errors.Is(err, domain.ErrInvalidOnboardingTransition) {
 			t.Errorf("expected ErrInvalidOnboardingTransition, got %v", err)
 		}
 	})
 
-	t.Run("invalid reconstitution: decided without being submitted", func(t *testing.T) {
+	t.Run("invalid reconstitution: approved without submittedAt", func(t *testing.T) {
 		_, err := domain.ReconstituteProfile(
 			"user-uuid-1234",
 			name,
@@ -228,9 +347,6 @@ func TestReconstituteProfile(t *testing.T) {
 			now,
 			now,
 		)
-		if err == nil {
-			t.Fatal("expected error for decidedAt without submittedAt, got nil")
-		}
 		if !errors.Is(err, domain.ErrInvalidOnboardingTransition) {
 			t.Errorf("expected ErrInvalidOnboardingTransition, got %v", err)
 		}
@@ -258,6 +374,28 @@ func TestReconstituteProfile(t *testing.T) {
 		}
 	})
 
+	t.Run("valid reconstitution with under review state", func(t *testing.T) {
+		p, err := domain.ReconstituteProfile(
+			"user-uuid-1234",
+			name,
+			dob,
+			phone,
+			addr,
+			domain.OnboardingStateUnderReview,
+			&subTime,
+			nil,
+			1,
+			now,
+			now,
+		)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if p.OnboardingState() != domain.OnboardingStateUnderReview {
+			t.Errorf("expected state UNDER_REVIEW, got %v", p.OnboardingState())
+		}
+	})
+
 	t.Run("valid reconstitution with rejected state and decision", func(t *testing.T) {
 		p, err := domain.ReconstituteProfile(
 			"user-uuid-1234",
@@ -277,6 +415,41 @@ func TestReconstituteProfile(t *testing.T) {
 		}
 		if p.OnboardingState() != domain.OnboardingStateRejected {
 			t.Errorf("expected state REJECTED, got %v", p.OnboardingState())
+		}
+	})
+
+	t.Run("defensive copying of timestamps prevents caller mutation", func(t *testing.T) {
+		inputSub := now.Add(-1 * time.Hour)
+		inputDec := now
+
+		p, err := domain.ReconstituteProfile(
+			"user-uuid-1234",
+			name,
+			dob,
+			phone,
+			addr,
+			domain.OnboardingStateApproved,
+			&inputSub,
+			&inputDec,
+			1,
+			now,
+			now,
+		)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		// Mutating caller's time should not affect aggregate
+		inputSub = inputSub.Add(10 * time.Minute)
+		if p.OnboardingSubmittedAt().Equal(inputSub) {
+			t.Errorf("mutating inputSub mutated internal state")
+		}
+
+		// Mutating returned pointer should not affect subsequent calls
+		retSub := p.OnboardingSubmittedAt()
+		*retSub = retSub.Add(10 * time.Minute)
+		if p.OnboardingSubmittedAt().Equal(*retSub) {
+			t.Errorf("mutating returned timestamp mutated internal state")
 		}
 	})
 }
@@ -448,6 +621,25 @@ func TestProfile_ContactUpdates(t *testing.T) {
 		}
 		if profile.Version() != 4 {
 			t.Errorf("expected version 4, got %d", profile.Version())
+		}
+	})
+
+	t.Run("reject zero value objects on update", func(t *testing.T) {
+		validPhone, _ := domain.NewPhone("+12025550143")
+		validAddr, _ := domain.NewAddress("1 Main St", "", "City", "", "", "US")
+		now := time.Now().UTC()
+
+		if err := profile.UpdateContact(domain.Phone{}, validAddr, now); !errors.Is(err, domain.ErrInvalidPhoneNumber) {
+			t.Errorf("expected ErrInvalidPhoneNumber for zero phone in UpdateContact, got %v", err)
+		}
+		if err := profile.UpdateContact(validPhone, domain.Address{}, now); !errors.Is(err, domain.ErrEmptyAddressLine1) {
+			t.Errorf("expected ErrEmptyAddressLine1 for zero address in UpdateContact, got %v", err)
+		}
+		if err := profile.UpdatePhone(domain.Phone{}, now); !errors.Is(err, domain.ErrInvalidPhoneNumber) {
+			t.Errorf("expected ErrInvalidPhoneNumber for zero phone in UpdatePhone, got %v", err)
+		}
+		if err := profile.UpdateAddress(domain.Address{}, now); !errors.Is(err, domain.ErrEmptyAddressLine1) {
+			t.Errorf("expected ErrEmptyAddressLine1 for zero address in UpdateAddress, got %v", err)
 		}
 	})
 }

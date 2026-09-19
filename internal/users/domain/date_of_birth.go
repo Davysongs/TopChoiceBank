@@ -108,3 +108,8 @@ func (d DateOfBirth) Equals(other DateOfBirth) bool {
 	return d.year == other.year && d.month == other.month && d.day == other.day
 }
 
+// IsZero returns true if the DateOfBirth is an uninitialized zero value.
+func (d DateOfBirth) IsZero() bool {
+	return d.year == 0 && d.month == 0 && d.day == 0
+}
+
