@@ -126,6 +126,94 @@ func TestReconstituteProfile(t *testing.T) {
 		}
 	})
 
+	t.Run("invalid reconstitution: empty onboarding state", func(t *testing.T) {
+		_, err := domain.ReconstituteProfile(
+			"user-uuid-1234",
+			name,
+			dob,
+			phone,
+			addr,
+			"",
+			&subTime,
+			&decTime,
+			1,
+			now,
+			now,
+		)
+		if err == nil {
+			t.Fatal("expected error for empty onboarding state, got nil")
+		}
+		if !errors.Is(err, domain.ErrInvalidOnboardingTransition) {
+			t.Errorf("expected ErrInvalidOnboardingTransition, got %v", err)
+		}
+	})
+
+	t.Run("invalid reconstitution: unknown onboarding state", func(t *testing.T) {
+		_, err := domain.ReconstituteProfile(
+			"user-uuid-1234",
+			name,
+			dob,
+			phone,
+			addr,
+			"UNKNOWN_STATE",
+			&subTime,
+			&decTime,
+			1,
+			now,
+			now,
+		)
+		if err == nil {
+			t.Fatal("expected error for unknown onboarding state, got nil")
+		}
+		if !errors.Is(err, domain.ErrInvalidOnboardingTransition) {
+			t.Errorf("expected ErrInvalidOnboardingTransition, got %v", err)
+		}
+	})
+
+	t.Run("invalid reconstitution: approved state without decidedAt", func(t *testing.T) {
+		_, err := domain.ReconstituteProfile(
+			"user-uuid-1234",
+			name,
+			dob,
+			phone,
+			addr,
+			domain.OnboardingStateApproved,
+			&subTime,
+			nil,
+			1,
+			now,
+			now,
+		)
+		if err == nil {
+			t.Fatal("expected error for approved state without decidedAt, got nil")
+		}
+		if !errors.Is(err, domain.ErrInvalidOnboardingTransition) {
+			t.Errorf("expected ErrInvalidOnboardingTransition, got %v", err)
+		}
+	})
+
+	t.Run("invalid reconstitution: rejected state without decidedAt", func(t *testing.T) {
+		_, err := domain.ReconstituteProfile(
+			"user-uuid-1234",
+			name,
+			dob,
+			phone,
+			addr,
+			domain.OnboardingStateRejected,
+			&subTime,
+			nil,
+			1,
+			now,
+			now,
+		)
+		if err == nil {
+			t.Fatal("expected error for rejected state without decidedAt, got nil")
+		}
+		if !errors.Is(err, domain.ErrInvalidOnboardingTransition) {
+			t.Errorf("expected ErrInvalidOnboardingTransition, got %v", err)
+		}
+	})
+
 	t.Run("invalid reconstitution: decided without being submitted", func(t *testing.T) {
 		_, err := domain.ReconstituteProfile(
 			"user-uuid-1234",
@@ -145,6 +233,50 @@ func TestReconstituteProfile(t *testing.T) {
 		}
 		if !errors.Is(err, domain.ErrInvalidOnboardingTransition) {
 			t.Errorf("expected ErrInvalidOnboardingTransition, got %v", err)
+		}
+	})
+
+	t.Run("valid reconstitution with pending state", func(t *testing.T) {
+		p, err := domain.ReconstituteProfile(
+			"user-uuid-1234",
+			name,
+			dob,
+			phone,
+			addr,
+			domain.OnboardingStatePending,
+			nil,
+			nil,
+			1,
+			now,
+			now,
+		)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if p.OnboardingState() != domain.OnboardingStatePending {
+			t.Errorf("expected state PENDING, got %v", p.OnboardingState())
+		}
+	})
+
+	t.Run("valid reconstitution with rejected state and decision", func(t *testing.T) {
+		p, err := domain.ReconstituteProfile(
+			"user-uuid-1234",
+			name,
+			dob,
+			phone,
+			addr,
+			domain.OnboardingStateRejected,
+			&subTime,
+			&decTime,
+			2,
+			now.Add(-24*time.Hour),
+			now,
+		)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if p.OnboardingState() != domain.OnboardingStateRejected {
+			t.Errorf("expected state REJECTED, got %v", p.OnboardingState())
 		}
 	})
 }

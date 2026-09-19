@@ -83,6 +83,16 @@ func ReconstituteProfile(
 		return nil, ErrEmptyUserID
 	}
 
+	switch onboardingState {
+	case OnboardingStatePending, OnboardingStateUnderReview:
+	case OnboardingStateApproved, OnboardingStateRejected:
+		if decidedAt == nil {
+			return nil, ErrInvalidOnboardingTransition
+		}
+	default:
+		return nil, ErrInvalidOnboardingTransition
+	}
+
 	// Database invariant: CHECK (onboarding_decided_at IS NULL OR onboarding_submitted_at IS NOT NULL)
 	if decidedAt != nil && submittedAt == nil {
 		return nil, ErrInvalidOnboardingTransition
