@@ -453,7 +453,7 @@ components:
           example: Alice Smith
         phone_masked:
           type: string
-          example: +1*****0143
+          example: "+1*****0143"
         address:
           $ref: '#/components/schemas/AddressResponse'
         onboarding_state:
@@ -469,7 +469,7 @@ components:
       properties:
         phone_e164:
           type: string
-          example: +12025550143
+          example: "+12025550143"
         address:
           $ref: '#/components/schemas/AddressInput'
 
