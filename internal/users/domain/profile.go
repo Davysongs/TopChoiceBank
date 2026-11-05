@@ -32,6 +32,7 @@ type Profile struct {
 	updatedAt             time.Time
 }
 
+// cloneTime returns a pointer to a copy of t, or nil if t is nil.
 func cloneTime(t *time.Time) *time.Time {
 	if t == nil {
 		return nil

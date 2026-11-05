@@ -11,6 +11,7 @@ import (
 	platformdb "github.com/Davysongs/TopChoiceBank/internal/platform/database"
 	platformhttp "github.com/Davysongs/TopChoiceBank/internal/platform/http"
 	"github.com/Davysongs/TopChoiceBank/internal/platform/logging"
+	"github.com/Davysongs/TopChoiceBank/internal/users"
 )
 
 // main configures and runs the API process until it receives a shutdown signal.
@@ -55,6 +56,10 @@ func main() {
 		identityRepo := identity.NewPostgresRepository(db)
 		identityService := identity.NewService(identityRepo, cfg.JWTSecret)
 		platformhttp.RegisterAuthRoutes(router, identityService)
+
+		usersRepo := users.NewPostgresRepository(db)
+		usersService := users.NewService(usersRepo, identityRepo)
+		platformhttp.RegisterUserRoutes(router, usersService, cfg.JWTSecret)
 	}
 
 	if err := platformhttp.Run(
