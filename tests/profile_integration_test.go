@@ -383,6 +383,41 @@ func TestProfile_PatchOptimisticConcurrency(t *testing.T) {
 	if resp3.Header.Get("ETag") != "\"3\"" {
 		t.Errorf("expected ETag \"3\", got %q", resp3.Header.Get("ETag"))
 	}
+
+	// Step 4: No-op patch with stale If-Match: "2" -> should return 409 Conflict
+	noopReqStale, _ := http.NewRequest(http.MethodPatch, server.URL+"/v1/users/me", bytes.NewReader([]byte("{}")))
+	noopReqStale.Header.Set("Authorization", "Bearer "+token)
+	noopReqStale.Header.Set("If-Match", "\"2\"") // Stale version!
+	noopReqStale.Header.Set("Content-Type", "application/json")
+
+	noopRespStale, err := http.DefaultClient.Do(noopReqStale)
+	if err != nil {
+		t.Fatalf("noop patch stale failed: %v", err)
+	}
+	defer noopRespStale.Body.Close()
+
+	if noopRespStale.StatusCode != http.StatusConflict {
+		t.Fatalf("expected 409 Conflict on stale no-op patch, got %d", noopRespStale.StatusCode)
+	}
+
+	// Step 5: No-op patch with matching If-Match: "3" -> should succeed (200 OK) and retain version 3
+	noopReqMatch, _ := http.NewRequest(http.MethodPatch, server.URL+"/v1/users/me", bytes.NewReader([]byte("{}")))
+	noopReqMatch.Header.Set("Authorization", "Bearer "+token)
+	noopReqMatch.Header.Set("If-Match", "\"3\"") // Current version!
+	noopReqMatch.Header.Set("Content-Type", "application/json")
+
+	noopRespMatch, err := http.DefaultClient.Do(noopReqMatch)
+	if err != nil {
+		t.Fatalf("noop patch matching failed: %v", err)
+	}
+	defer noopRespMatch.Body.Close()
+
+	if noopRespMatch.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 OK on matching no-op patch, got %d", noopRespMatch.StatusCode)
+	}
+	if noopRespMatch.Header.Get("ETag") != "\"3\"" {
+		t.Errorf("expected ETag \"3\", got %q", noopRespMatch.Header.Get("ETag"))
+	}
 }
 
 func TestProfile_InvariantValidationErrors(t *testing.T) {

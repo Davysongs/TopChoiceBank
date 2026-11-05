@@ -163,9 +163,6 @@ func (s *Service) UpdateProfile(ctx context.Context, userID string, expectedVers
 	if expectedVersion < 1 {
 		return nil, ErrVersionConflict
 	}
-	if req.PhoneE164 == nil && req.Address == nil {
-		return s.GetProfile(ctx, userID)
-	}
 
 	profile, err := s.repo.GetProfileByUserID(ctx, userID)
 	if err != nil {
@@ -174,6 +171,10 @@ func (s *Service) UpdateProfile(ctx context.Context, userID string, expectedVers
 
 	if profile.Version() != expectedVersion {
 		return nil, ErrVersionConflict
+	}
+
+	if req.PhoneE164 == nil && req.Address == nil {
+		return s.GetProfile(ctx, userID)
 	}
 
 	now := time.Now().UTC()
