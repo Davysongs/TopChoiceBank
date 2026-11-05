@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -571,5 +572,69 @@ func TestProfile_AtomicOutboxEventEmission(t *testing.T) {
 	}
 	if updatedCount != 1 {
 		t.Errorf("expected 1 users.profile_updated.v1 event, got %d", updatedCount)
+	}
+}
+
+func TestProfile_UniqueConstraintHandling(t *testing.T) {
+	server, db, usersSvc := setupProfileTestServer(t)
+	defer server.Close()
+	defer db.Close()
+
+	email1 := fmt.Sprintf("uniq1_%d@example.com", time.Now().UnixNano())
+	userID1, _ := registerAndLoginUser(t, server, email1)
+
+	phone1 := uniquePhone()
+	_, err := usersSvc.CreateProfile(context.Background(), users.CreateProfileRequest{
+		UserID:          userID1,
+		LegalGivenName:  "Primary",
+		LegalFamilyName: "User",
+		DateOfBirth:     "1991-01-01",
+		PhoneE164:       phone1,
+		Address: users.AddressInput{
+			Line1:       "1 Main St",
+			City:        "Boston",
+			CountryCode: "US",
+		},
+	})
+	if err != nil {
+		t.Fatalf("failed to create initial profile: %v", err)
+	}
+
+	// 1. Attempting duplicate user_id must return ErrProfileAlreadyExists
+	phone2 := uniquePhone()
+	_, err = usersSvc.CreateProfile(context.Background(), users.CreateProfileRequest{
+		UserID:          userID1, // duplicate user_id!
+		LegalGivenName:  "Primary",
+		LegalFamilyName: "User",
+		DateOfBirth:     "1991-01-01",
+		PhoneE164:       phone2,
+		Address: users.AddressInput{
+			Line1:       "1 Main St",
+			City:        "Boston",
+			CountryCode: "US",
+		},
+	})
+	if !errors.Is(err, users.ErrProfileAlreadyExists) {
+		t.Errorf("expected ErrProfileAlreadyExists on duplicate user_id, got: %v", err)
+	}
+
+	// 2. Attempting duplicate phone must return ErrDuplicatePhone
+	email2 := fmt.Sprintf("uniq2_%d@example.com", time.Now().UnixNano())
+	userID2, _ := registerAndLoginUser(t, server, email2)
+
+	_, err = usersSvc.CreateProfile(context.Background(), users.CreateProfileRequest{
+		UserID:          userID2,
+		LegalGivenName:  "Second",
+		LegalFamilyName: "User",
+		DateOfBirth:     "1992-02-02",
+		PhoneE164:       phone1, // duplicate phone!
+		Address: users.AddressInput{
+			Line1:       "2 Main St",
+			City:        "Boston",
+			CountryCode: "US",
+		},
+	})
+	if !errors.Is(err, users.ErrDuplicatePhone) {
+		t.Errorf("expected ErrDuplicatePhone on duplicate phone, got: %v", err)
 	}
 }

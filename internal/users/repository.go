@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/Davysongs/TopChoiceBank/internal/users/domain"
@@ -13,9 +14,10 @@ import (
 )
 
 var (
-	ErrProfileNotFound = errors.New("profile not found")
-	ErrVersionConflict = errors.New("optimistic lock version conflict")
-	ErrDuplicatePhone  = errors.New("phone number already registered")
+	ErrProfileNotFound      = errors.New("profile not found")
+	ErrVersionConflict      = errors.New("optimistic lock version conflict")
+	ErrDuplicatePhone       = errors.New("phone number already registered")
+	ErrProfileAlreadyExists = errors.New("profile already exists for user")
 )
 
 // Repository defines storage operations for customer profiles and transactional events.
@@ -83,7 +85,12 @@ func (r *PostgresRepository) CreateProfileWithOutbox(ctx context.Context, profil
 	if err != nil {
 		var pqErr *pq.Error
 		if errors.As(err, &pqErr) && pqErr.Code == "23505" {
-			return ErrDuplicatePhone
+			if strings.Contains(pqErr.Constraint, "phone") {
+				return ErrDuplicatePhone
+			}
+			if strings.Contains(pqErr.Constraint, "pkey") || pqErr.Constraint == "user_profiles_pkey" {
+				return ErrProfileAlreadyExists
+			}
 		}
 		return fmt.Errorf("failed to insert user profile: %w", err)
 	}
@@ -254,7 +261,9 @@ func (r *PostgresRepository) UpdateProfileWithOutbox(
 	if err != nil {
 		var pqErr *pq.Error
 		if errors.As(err, &pqErr) && pqErr.Code == "23505" {
-			return ErrDuplicatePhone
+			if strings.Contains(pqErr.Constraint, "phone") {
+				return ErrDuplicatePhone
+			}
 		}
 		return fmt.Errorf("failed to execute profile update: %w", err)
 	}
