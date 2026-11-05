@@ -163,7 +163,7 @@ func (r *PostgresRepository) GetProfileByUserID(ctx context.Context, userID stri
 		return nil, fmt.Errorf("corrupt legal name in persistence: %w", err)
 	}
 
-	dob, err := domain.NewDateOfBirth(dobTime.Year(), dobTime.Month(), dobTime.Day(), dobTime)
+	dob, err := domain.NewDateOfBirth(dobTime.Year(), dobTime.Month(), dobTime.Day(), time.Now().UTC())
 	if err != nil {
 		return nil, fmt.Errorf("corrupt date of birth in persistence: %w", err)
 	}
