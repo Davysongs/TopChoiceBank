@@ -141,6 +141,119 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
+  /v1/users/me:
+    get:
+      summary: Return the authenticated user's profile and onboarding state
+      operationId: getCurrentUserProfile
+      tags:
+        - Users & Profiles
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: User profile retrieved successfully
+          headers:
+            ETag:
+              schema:
+                type: string
+              description: Entity tag representing profile version
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProfileResponse'
+        '401':
+          description: Missing, invalid, or expired access token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '404':
+          description: Profile not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+    patch:
+      summary: Update mutable contact and address fields using optimistic concurrency
+      operationId: updateCurrentUserProfile
+      tags:
+        - Users & Profiles
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: If-Match
+          in: header
+          required: true
+          description: Optimistic locking version of the profile
+          schema:
+            type: string
+            example: "1"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProfileRequest'
+      responses:
+        '200':
+          description: Profile updated successfully
+          headers:
+            ETag:
+              schema:
+                type: string
+              description: New entity tag representing updated profile version
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProfileResponse'
+        '400':
+          description: Missing If-Match header or malformed JSON
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '401':
+          description: Missing, invalid, or expired access token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '403':
+          description: Attempt to modify immutable legal identity fields
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '404':
+          description: Profile not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '409':
+          description: Optimistic locking version conflict or phone already in use
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '422':
+          description: Validation error in phone number or address fields
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
 
 components:
   schemas:
@@ -265,3 +378,103 @@ components:
         instance:
           type: string
           example: /v1/auth/register
+
+    AddressResponse:
+      type: object
+      required:
+        - line1
+        - city
+        - country_code
+      properties:
+        line1:
+          type: string
+          example: 123 Main St
+        line2:
+          type: string
+          example: Apt 4B
+        city:
+          type: string
+          example: New York
+        region:
+          type: string
+          example: NY
+        postal_code:
+          type: string
+          example: "10001"
+        country_code:
+          type: string
+          example: US
+
+    AddressInput:
+      type: object
+      required:
+        - line1
+        - city
+        - country_code
+      properties:
+        line1:
+          type: string
+          example: 123 Main St
+        line2:
+          type: string
+          example: Apt 4B
+        city:
+          type: string
+          example: New York
+        region:
+          type: string
+          example: NY
+        postal_code:
+          type: string
+          example: "10001"
+        country_code:
+          type: string
+          example: US
+
+    ProfileResponse:
+      type: object
+      required:
+        - id
+        - legal_name
+        - phone_masked
+        - address
+        - onboarding_state
+        - version
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: 123e4567-e89b-12d3-a456-426614174000
+        email_masked:
+          type: string
+          example: a***@example.com
+        legal_name:
+          type: string
+          example: Alice Smith
+        phone_masked:
+          type: string
+          example: +1*****0143
+        address:
+          $ref: '#/components/schemas/AddressResponse'
+        onboarding_state:
+          type: string
+          enum: [PENDING, UNDER_REVIEW, APPROVED, REJECTED]
+          example: PENDING
+        version:
+          type: integer
+          example: 1
+
+    UpdateProfileRequest:
+      type: object
+      properties:
+        phone_e164:
+          type: string
+          example: +12025550143
+        address:
+          $ref: '#/components/schemas/AddressInput'
+
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
