@@ -144,3 +144,4 @@ func handlePatchProfile(w http.ResponseWriter, r *http.Request, service *users.S
 	w.Header().Set("ETag", fmt.Sprintf("\"%d\"", profile.Version))
 	writeJSON(w, http.StatusOK, profile)
 }
+

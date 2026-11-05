@@ -271,3 +271,4 @@ func maskEmail(email string) string {
 	}
 	return name[:1] + "***" + name[len(name)-1:] + "@" + domainPart
 }
+
