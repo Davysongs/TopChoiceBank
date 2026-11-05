@@ -40,6 +40,7 @@ func handleUserMe(service *users.Service, jwtSecret string) http.HandlerFunc {
 	}
 }
 
+// authenticateUser validates the Authorization Bearer JWT header and returns the authenticated user ID.
 func authenticateUser(w http.ResponseWriter, r *http.Request, jwtSecret string) (string, bool) {
 	authHeader := r.Header.Get("Authorization")
 	if strings.TrimSpace(authHeader) == "" || !strings.HasPrefix(authHeader, "Bearer ") {
@@ -57,6 +58,7 @@ func authenticateUser(w http.ResponseWriter, r *http.Request, jwtSecret string) 
 	return claims.Subject, true
 }
 
+// handleGetProfile handles GET /v1/users/me, returning the caller's profile and current ETag version.
 func handleGetProfile(w http.ResponseWriter, r *http.Request, service *users.Service, userID string) {
 	profile, err := service.GetProfile(r.Context(), userID)
 	if err != nil {
@@ -72,6 +74,8 @@ func handleGetProfile(w http.ResponseWriter, r *http.Request, service *users.Ser
 	writeJSON(w, http.StatusOK, profile)
 }
 
+// handlePatchProfile handles PATCH /v1/users/me, enforcing If-Match optimistic concurrency
+// and rejecting attempts to modify immutable legal identity fields.
 func handlePatchProfile(w http.ResponseWriter, r *http.Request, service *users.Service, userID string) {
 	ifMatch := r.Header.Get("If-Match")
 	if strings.TrimSpace(ifMatch) == "" {

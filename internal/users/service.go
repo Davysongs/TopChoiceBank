@@ -241,6 +241,7 @@ func (s *Service) UpdateProfile(ctx context.Context, userID string, expectedVers
 	return toProfileResponse(profile, emailMasked), nil
 }
 
+// toProfileResponse maps a Profile aggregate and masked email to an API ProfileResponse.
 func toProfileResponse(profile *domain.Profile, emailMasked string) *ProfileResponse {
 	return &ProfileResponse{
 		ID:          profile.UserID(),
@@ -260,6 +261,7 @@ func toProfileResponse(profile *domain.Profile, emailMasked string) *ProfileResp
 	}
 }
 
+// maskEmail masks the username component of an email address for privacy and PII protection.
 func maskEmail(email string) string {
 	parts := strings.Split(email, "@")
 	if len(parts) != 2 || len(parts[0]) == 0 {

@@ -28,11 +28,13 @@ const testJWTSecret = "integration-test-jwt-secret-key-32bytes"
 
 var phoneCounter int64
 
+// uniquePhone generates a monotonically increasing unique E.164 phone number for testing.
 func uniquePhone() string {
 	val := atomic.AddInt64(&phoneCounter, 1)
 	return fmt.Sprintf("+1%010d%04d", time.Now().Unix(), val%10000)
 }
 
+// setupProfileTestServer creates a migrated test database and HTTP server configured with profile and auth routes.
 func setupProfileTestServer(t *testing.T) (*httptest.Server, *sql.DB, *users.Service) {
 	t.Helper()
 
@@ -77,6 +79,7 @@ func setupProfileTestServer(t *testing.T) (*httptest.Server, *sql.DB, *users.Ser
 	return server, db, usersSvc
 }
 
+// registerAndLoginUser registers a new user with the given email and returns the user ID and access token.
 func registerAndLoginUser(t *testing.T, server *httptest.Server, email string) (string, string) {
 	t.Helper()
 
@@ -123,6 +126,7 @@ func registerAndLoginUser(t *testing.T, server *httptest.Server, email string) (
 	return userID, token
 }
 
+// TestProfile_CreateAndGetProfile verifies profile creation and subsequent retrieval with masked PII and ETag headers.
 func TestProfile_CreateAndGetProfile(t *testing.T) {
 	server, db, usersSvc := setupProfileTestServer(t)
 	defer server.Close()
@@ -195,6 +199,7 @@ func TestProfile_CreateAndGetProfile(t *testing.T) {
 	}
 }
 
+// TestProfile_CrossTenantAccessDenied verifies that a user cannot access or mutate another customer's profile.
 func TestProfile_CrossTenantAccessDenied(t *testing.T) {
 	server, db, usersSvc := setupProfileTestServer(t)
 	defer server.Close()
@@ -291,6 +296,7 @@ func TestProfile_CrossTenantAccessDenied(t *testing.T) {
 	}
 }
 
+// TestProfile_PatchOptimisticConcurrency tests If-Match optimistic locking, version increments, and conflict rejection on stale versions.
 func TestProfile_PatchOptimisticConcurrency(t *testing.T) {
 	server, db, usersSvc := setupProfileTestServer(t)
 	defer server.Close()
@@ -420,6 +426,7 @@ func TestProfile_PatchOptimisticConcurrency(t *testing.T) {
 	}
 }
 
+// TestProfile_InvariantValidationErrors tests validation rules for future birth dates, missing headers, immutable fields, and malformed phone numbers.
 func TestProfile_InvariantValidationErrors(t *testing.T) {
 	server, db, usersSvc := setupProfileTestServer(t)
 	defer server.Close()
@@ -532,6 +539,7 @@ func TestProfile_InvariantValidationErrors(t *testing.T) {
 	})
 }
 
+// TestProfile_AtomicOutboxEventEmission verifies atomic emission of profile_created and profile_updated events into the outbox table.
 func TestProfile_AtomicOutboxEventEmission(t *testing.T) {
 	server, db, usersSvc := setupProfileTestServer(t)
 	defer server.Close()
@@ -610,6 +618,7 @@ func TestProfile_AtomicOutboxEventEmission(t *testing.T) {
 	}
 }
 
+// TestProfile_UniqueConstraintHandling verifies distinct handling for duplicate user IDs versus duplicate phone numbers.
 func TestProfile_UniqueConstraintHandling(t *testing.T) {
 	server, db, usersSvc := setupProfileTestServer(t)
 	defer server.Close()

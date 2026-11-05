@@ -296,6 +296,7 @@ func (r *PostgresRepository) UpdateProfileWithOutbox(
 	return nil
 }
 
+// nullableString converts empty strings to nil SQL parameters for nullable database columns.
 func nullableString(s string) any {
 	if s == "" {
 		return nil
