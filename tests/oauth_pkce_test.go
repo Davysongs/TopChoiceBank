@@ -67,7 +67,7 @@ func setupOAuthTestServer(t *testing.T) (*httptest.Server, *oauth.OAuthAdapter, 
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(fmt.Sprintf(`{"account_id":"acc-123","subject":"%s"}`, claims.Subject)))
+		_, _ = w.Write(fmt.Appendf(nil, `{"account_id":"acc-123","subject":"%s"}`, claims.Subject))
 	}))))
 
 	oauthServer := httptest.NewServer(router.Handler())
