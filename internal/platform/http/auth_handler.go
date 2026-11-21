@@ -233,6 +233,10 @@ func handleMFAEnroll(service *identity.Service) http.HandlerFunc {
 			RequestID: r.Header.Get("X-Request-ID"),
 		})
 		if err != nil {
+			if errors.Is(err, identity.ErrAccountLocked) || errors.Is(err, identity.ErrAccountDisabled) {
+				writeProblem(w, http.StatusForbidden, "Access Forbidden", err.Error(), r.URL.Path)
+				return
+			}
 			if errors.Is(err, identity.ErrInvalidCredentials) {
 				writeProblem(w, http.StatusUnauthorized, "Unauthorized", "Password confirmation failed", r.URL.Path)
 				return
@@ -373,6 +377,10 @@ func handlePasswordChange(service *identity.Service) http.HandlerFunc {
 			RequestID:       r.Header.Get("X-Request-ID"),
 		})
 		if err != nil {
+			if errors.Is(err, identity.ErrAccountLocked) || errors.Is(err, identity.ErrAccountDisabled) {
+				writeProblem(w, http.StatusForbidden, "Access Forbidden", err.Error(), r.URL.Path)
+				return
+			}
 			if errors.Is(err, identity.ErrInvalidCredentials) {
 				writeProblem(w, http.StatusUnauthorized, "Unauthorized", "Invalid current password", r.URL.Path)
 				return

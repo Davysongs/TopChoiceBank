@@ -14,6 +14,7 @@ import (
 	"github.com/pquerna/otp/totp"
 
 	"github.com/Davysongs/TopChoiceBank/internal/identity"
+	"github.com/Davysongs/TopChoiceBank/internal/identity/domain"
 )
 
 // extractSecretFromOTPAuthURI parses an otpauth URI and extracts the secret parameter.
@@ -570,4 +571,41 @@ func TestPasswordChangeRequiresMFAAndRevokesSessions(t *testing.T) {
 	if respNewLogin.StatusCode != http.StatusOK {
 		t.Fatalf("expected 200 OK for login with new password, got %d", respNewLogin.StatusCode)
 	}
+
+	// 6. Verify password change on a locked user returns 403 Forbidden
+	_, _ = db.ExecContext(context.Background(), `UPDATE identity.users SET status = 'LOCKED', locked_until = clock_timestamp() + interval '30 minutes' WHERE id = $1`, userID)
+	lockedChangeReq, _ := http.NewRequest(http.MethodPost, server.URL+"/v1/auth/password/change", bytes.NewBuffer(withMFABody))
+	lockedChangeReq.Header.Set("Authorization", "Bearer "+token)
+	lockedChangeReq.Header.Set("Content-Type", "application/json")
+	respLockedChange, err := http.DefaultClient.Do(lockedChangeReq)
+	if err != nil {
+		t.Fatalf("locked password change request failed: %v", err)
+	}
+	defer respLockedChange.Body.Close()
+	if respLockedChange.StatusCode != http.StatusForbidden {
+		t.Fatalf("expected 403 Forbidden for locked user password change, got %d", respLockedChange.StatusCode)
+	}
+	// Restore user status
+	_, _ = db.ExecContext(context.Background(), `UPDATE identity.users SET status = 'ACTIVE', locked_until = NULL WHERE id = $1`, userID)
+
+	// 7. Verify UpdateUserStatusAndLockout rejects stale writes that would overwrite newer lockout
+	repo := identity.NewPostgresRepository(db)
+	userSnap, err := repo.GetUserByID(context.Background(), userID)
+	if err != nil {
+		t.Fatalf("failed to fetch user snapshot: %v", err)
+	}
+	// Lock the user directly in database
+	_, _ = db.ExecContext(context.Background(), `UPDATE identity.users SET status = 'LOCKED', locked_until = clock_timestamp() + interval '30 minutes' WHERE id = $1`, userID)
+	// Stale snapshot has status ACTIVE; attempting to update status should be rejected
+	userSnap.Status = domain.UserStatusActive
+	err = repo.UpdateUserStatusAndLockout(context.Background(), userSnap)
+	if err == nil {
+		t.Fatalf("expected concurrent modification error when attempting to overwrite newer lockout")
+	}
+	// Verify user is still locked
+	userLockedCheck, _ := repo.GetUserByID(context.Background(), userID)
+	if userLockedCheck.Status != domain.UserStatusLocked {
+		t.Fatalf("expected user to remain LOCKED, got %s", userLockedCheck.Status)
+	}
+	_, _ = db.ExecContext(context.Background(), `UPDATE identity.users SET status = 'ACTIVE', locked_until = NULL WHERE id = $1`, userID)
 }

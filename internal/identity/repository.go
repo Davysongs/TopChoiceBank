@@ -201,6 +201,7 @@ func (r *PostgresRepository) UpdateUserStatusAndLockout(ctx context.Context, use
 		    version = version + 1,
 		    updated_at = $5
 		WHERE id = $6 AND version = $7
+		  AND ($1 = 'LOCKED' OR status != 'LOCKED' OR locked_until IS NULL OR locked_until <= clock_timestamp())
 	`
 	res, err := r.db.ExecContext(
 		ctx,
@@ -898,7 +899,13 @@ func (r *PostgresRepository) RotatePasswordTx(
 	var newVersion int64
 	query := `
 		UPDATE identity.users
-		SET password_hash = $2, password_changed_at = clock_timestamp(), version = version + 1, updated_at = clock_timestamp()
+		SET password_hash = $2,
+		    password_changed_at = clock_timestamp(),
+		    failed_login_count = 0,
+		    failed_login_window_started_at = NULL,
+		    locked_until = NULL,
+		    version = version + 1,
+		    updated_at = clock_timestamp()
 		WHERE id = $1
 		RETURNING version
 	`

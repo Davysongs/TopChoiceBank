@@ -409,7 +409,12 @@ func (s *Service) Login(ctx context.Context, req LoginRequest) (*LoginResponse, 
 
 	// Reset failed login count and record successful login upon complete authentication
 	user.RecordSuccessfulLogin(now)
-	_ = s.repo.UpdateUserStatusAndLockout(ctx, user)
+	if err := s.repo.UpdateUserStatusAndLockout(ctx, user); err != nil {
+		if u, getErr := s.repo.GetUserByID(ctx, user.ID); getErr == nil && u.IsLocked(now) {
+			_ = s.repo.RecordSecurityEvent(ctx, user.ID, "identity.account_locked.v1", "BLOCKED", req.RequestID, req.RequestIP, map[string]any{"locked_until": u.LockedUntil})
+			return nil, ErrAccountLocked
+		}
+	}
 
 	scopes := domain.DefaultScopesForRoles(roles)
 
@@ -877,6 +882,7 @@ func (s *Service) ChangePassword(ctx context.Context, req ChangePasswordRequest)
 		return nil, err
 	}
 
+	user.Version++
 	user.RecordSuccessfulLogin(now)
 	_ = s.repo.UpdateUserStatusAndLockout(ctx, user)
 
