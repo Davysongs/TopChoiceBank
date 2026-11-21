@@ -109,7 +109,7 @@ func TestBackupCodes_GenerationAndHashing(t *testing.T) {
 
 	for i := 0; i < 10; i++ {
 		code := plainCodes[i]
-		if len(code) != 9 || code[4] != '-' {
+		if len(code) != 35 || code[8] != '-' || code[17] != '-' || code[26] != '-' {
 			t.Errorf("unexpected backup code format: %s", code)
 		}
 		expectedHash := HashBackupCode(code)
@@ -118,7 +118,7 @@ func TestBackupCodes_GenerationAndHashing(t *testing.T) {
 		}
 
 		// Verify case and hyphen insensitivity
-		variedCode := " " + code[:4] + code[5:] + " "
+		variedCode := " " + code[:8] + code[9:17] + code[18:26] + code[27:] + " "
 		if string(HashBackupCode(variedCode)) != string(hashes[i]) {
 			t.Errorf("hash should be hyphen and whitespace insensitive")
 		}

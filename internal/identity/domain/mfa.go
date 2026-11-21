@@ -15,14 +15,15 @@ import (
 )
 
 var (
-	ErrInvalidFactorType   = errors.New("invalid mfa factor type")
-	ErrInvalidFactorStatus = errors.New("invalid mfa factor status")
-	ErrInvalidFactorLabel  = errors.New("invalid mfa factor label")
-	ErrFactorAlreadyActive = errors.New("mfa factor is already active")
-	ErrFactorNotPending    = errors.New("mfa factor is not in pending status")
-	ErrFactorRevoked       = errors.New("mfa factor is revoked")
-	ErrInvalidTOTPCode     = errors.New("invalid or expired totp code")
-	ErrInvalidBackupCode   = errors.New("invalid or already consumed backup code")
+	ErrInvalidFactorType    = errors.New("invalid mfa factor type")
+	ErrInvalidFactorStatus  = errors.New("invalid mfa factor status")
+	ErrInvalidFactorLabel   = errors.New("invalid mfa factor label")
+	ErrFactorAlreadyActive  = errors.New("mfa factor is already active")
+	ErrFactorNotPending     = errors.New("mfa factor is not in pending status")
+	ErrFactorRevoked        = errors.New("mfa factor is revoked")
+	ErrInvalidTOTPCode      = errors.New("invalid or expired totp code")
+	ErrInvalidBackupCode    = errors.New("invalid or already consumed backup code")
+	ErrMFAEnrollmentExpired = errors.New("mfa enrollment has expired; please enroll again")
 )
 
 type FactorStatus string
@@ -44,6 +45,7 @@ type MFAFactor struct {
 	status          FactorStatus
 	verifiedAt      *time.Time
 	revokedAt       *time.Time
+	lastTOTPStep    int64
 	createdAt       time.Time
 }
 
@@ -100,6 +102,7 @@ func ReconstituteMFAFactor(
 	status FactorStatus,
 	verifiedAt *time.Time,
 	revokedAt *time.Time,
+	lastTOTPStep int64,
 	createdAt time.Time,
 ) (*MFAFactor, error) {
 	if factorType != "TOTP" {
@@ -132,6 +135,7 @@ func ReconstituteMFAFactor(
 		status:          status,
 		verifiedAt:      verifiedAt,
 		revokedAt:       revokedAt,
+		lastTOTPStep:    lastTOTPStep,
 		createdAt:       createdAt,
 	}, nil
 }
@@ -162,6 +166,9 @@ func (f *MFAFactor) VerifiedAt() *time.Time { return f.verifiedAt }
 
 // RevokedAt returns the timestamp when the factor was revoked.
 func (f *MFAFactor) RevokedAt() *time.Time { return f.revokedAt }
+
+// LastTOTPStep returns the last consumed TOTP time step to prevent replay.
+func (f *MFAFactor) LastTOTPStep() int64 { return f.lastTOTPStep }
 
 // CreatedAt returns the factor creation timestamp.
 func (f *MFAFactor) CreatedAt() time.Time { return f.createdAt }
@@ -204,7 +211,7 @@ func GenerateTOTPSecret() (string, error) {
 	return base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(bytes), nil
 }
 
-// GenerateBackupCodes generates count formatted single-use backup codes and their SHA-256 hashes.
+// GenerateBackupCodes generates count formatted single-use backup codes with at least 128 bits of entropy and their SHA-256 hashes.
 func GenerateBackupCodes(count int) ([]string, [][]byte, error) {
 	if count <= 0 {
 		count = 10
@@ -214,11 +221,16 @@ func GenerateBackupCodes(count int) ([]string, [][]byte, error) {
 	hashes := make([][]byte, count)
 
 	for i := 0; i < count; i++ {
-		b := make([]byte, 4)
+		b := make([]byte, 16)
 		if _, err := rand.Read(b); err != nil {
 			return nil, nil, fmt.Errorf("failed to generate random backup code: %w", err)
 		}
-		code := fmt.Sprintf("%04x-%04x", uint16(b[0])<<8|uint16(b[1]), uint16(b[2])<<8|uint16(b[3]))
+		code := fmt.Sprintf("%08x-%08x-%08x-%08x",
+			uint32(b[0])<<24|uint32(b[1])<<16|uint32(b[2])<<8|uint32(b[3]),
+			uint32(b[4])<<24|uint32(b[5])<<16|uint32(b[6])<<8|uint32(b[7]),
+			uint32(b[8])<<24|uint32(b[9])<<16|uint32(b[10])<<8|uint32(b[11]),
+			uint32(b[12])<<24|uint32(b[13])<<16|uint32(b[14])<<8|uint32(b[15]),
+		)
 		plainCodes[i] = code
 		hashes[i] = HashBackupCode(code)
 	}

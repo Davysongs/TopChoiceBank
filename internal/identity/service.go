@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net"
 	"net/mail"
+	"net/url"
 	"strings"
 	"time"
 
@@ -15,6 +16,8 @@ import (
 	platformdb "github.com/Davysongs/TopChoiceBank/internal/platform/database"
 	"github.com/Davysongs/TopChoiceBank/internal/platform/security"
 	"github.com/google/uuid"
+	"github.com/pquerna/otp"
+	"github.com/pquerna/otp/totp"
 )
 
 var (
@@ -270,6 +273,12 @@ func (s *Service) Login(ctx context.Context, req LoginRequest) (*LoginResponse, 
 	}
 
 	mfaVerified := false
+	var (
+		totpFactorID   string
+		matchedStep    int64
+		backupCodeHash []byte
+	)
+
 	if activeFactor != nil {
 		if strings.TrimSpace(req.TOTPCode) == "" && strings.TrimSpace(req.BackupCode) == "" {
 			return &LoginResponse{
@@ -282,17 +291,38 @@ func (s *Service) Login(ctx context.Context, req LoginRequest) (*LoginResponse, 
 			if err != nil {
 				return nil, fmt.Errorf("failed to decrypt factor secret: %w", err)
 			}
-			valid, err := domain.VerifyTOTPCode(string(secretBytes), req.TOTPCode, now)
-			if err != nil || !valid {
-				_ = s.repo.RecordSecurityEvent(ctx, user.ID, "identity.mfa_failed.v1", "FAILURE", req.RequestID, req.RequestIP, map[string]any{"reason": "invalid_totp"})
+
+			cleanCode := strings.TrimSpace(req.TOTPCode)
+			currentStep := now.Unix() / 30
+			var validStep int64 = 0
+			for step := currentStep - 1; step <= currentStep+1; step++ {
+				expectedCode, err := totp.GenerateCodeCustom(string(secretBytes), time.Unix(step*30, 0), totp.ValidateOpts{
+					Period:    30,
+					Digits:    otp.DigitsSix,
+					Algorithm: otp.AlgorithmSHA1,
+				})
+				if err == nil && expectedCode == cleanCode {
+					validStep = step
+					break
+				}
+			}
+
+			if validStep == 0 || (activeFactor.LastTOTPStep() > 0 && validStep <= activeFactor.LastTOTPStep()) {
+				user.RecordFailedLogin(now, lockoutWindow, lockoutDuration, maxAttempts)
+				_ = s.repo.UpdateUserStatusAndLockout(ctx, user)
+				_ = s.repo.RecordSecurityEvent(ctx, user.ID, "identity.mfa_failed.v1", "FAILURE", req.RequestID, req.RequestIP, map[string]any{"reason": "invalid_totp", "failed_count": user.FailedLoginCount})
+				if user.Status == domain.UserStatusLocked {
+					_ = s.repo.RecordSecurityEvent(ctx, user.ID, "identity.account_locked.v1", "BLOCKED", req.RequestID, req.RequestIP, map[string]any{"locked_until": user.LockedUntil})
+					return nil, ErrAccountLocked
+				}
 				return nil, domain.ErrInvalidTOTPCode
 			}
+
+			totpFactorID = activeFactor.ID()
+			matchedStep = validStep
 			mfaVerified = true
 		} else if strings.TrimSpace(req.BackupCode) != "" {
-			if err := s.ConsumeBackupCode(ctx, user.ID, req.BackupCode); err != nil {
-				_ = s.repo.RecordSecurityEvent(ctx, user.ID, "identity.mfa_failed.v1", "FAILURE", req.RequestID, req.RequestIP, map[string]any{"reason": "invalid_backup_code"})
-				return nil, domain.ErrInvalidBackupCode
-			}
+			backupCodeHash = domain.HashBackupCode(req.BackupCode)
 			mfaVerified = true
 		}
 	}
@@ -340,13 +370,43 @@ func (s *Service) Login(ctx context.Context, req LoginRequest) (*LoginResponse, 
 		return nil, err
 	}
 
-	if err := s.repo.CreateSessionAndFamily(ctx, family, session); err != nil {
+	mfaInput := SessionMFAInput{
+		ExpectedUserVersion: user.Version,
+		TOTPFactorID:        totpFactorID,
+		TOTPStep:            matchedStep,
+		BackupCodeHash:      backupCodeHash,
+	}
+
+	if err := s.repo.CreateSessionAndFamilyWithMFA(ctx, family, session, mfaInput); err != nil {
+		if errors.Is(err, domain.ErrInvalidBackupCode) {
+			user.RecordFailedLogin(now, lockoutWindow, lockoutDuration, maxAttempts)
+			_ = s.repo.UpdateUserStatusAndLockout(ctx, user)
+			_ = s.repo.RecordSecurityEvent(ctx, user.ID, "identity.mfa_failed.v1", "FAILURE", req.RequestID, req.RequestIP, map[string]any{"reason": "invalid_backup_code", "failed_count": user.FailedLoginCount})
+			if user.Status == domain.UserStatusLocked {
+				_ = s.repo.RecordSecurityEvent(ctx, user.ID, "identity.account_locked.v1", "BLOCKED", req.RequestID, req.RequestIP, map[string]any{"locked_until": user.LockedUntil})
+				return nil, ErrAccountLocked
+			}
+			return nil, domain.ErrInvalidBackupCode
+		}
+		if errors.Is(err, domain.ErrInvalidTOTPCode) {
+			user.RecordFailedLogin(now, lockoutWindow, lockoutDuration, maxAttempts)
+			_ = s.repo.UpdateUserStatusAndLockout(ctx, user)
+			_ = s.repo.RecordSecurityEvent(ctx, user.ID, "identity.mfa_failed.v1", "FAILURE", req.RequestID, req.RequestIP, map[string]any{"reason": "totp_replayed", "failed_count": user.FailedLoginCount})
+			if user.Status == domain.UserStatusLocked {
+				_ = s.repo.RecordSecurityEvent(ctx, user.ID, "identity.account_locked.v1", "BLOCKED", req.RequestID, req.RequestIP, map[string]any{"locked_until": user.LockedUntil})
+				return nil, ErrAccountLocked
+			}
+			return nil, domain.ErrInvalidTOTPCode
+		}
 		return nil, err
 	}
 
 	roles, err := s.repo.GetUserRoles(ctx, user.ID)
-	if err != nil || len(roles) == 0 {
-		roles = []string{domain.RoleCustomer}
+	if err != nil {
+		return nil, fmt.Errorf("failed to load user roles: %w", err)
+	}
+	if len(roles) == 0 {
+		roles = []string{}
 	}
 
 	scopes := domain.DefaultScopesForRoles(roles)
@@ -496,8 +556,11 @@ func (s *Service) RefreshSession(ctx context.Context, req RefreshRequest) (*Logi
 	}
 
 	roles, err := s.repo.GetUserRoles(ctx, agg.Session.UserID)
-	if err != nil || len(roles) == 0 {
-		roles = []string{"customer"}
+	if err != nil {
+		return nil, fmt.Errorf("failed to load user roles: %w", err)
+	}
+	if len(roles) == 0 {
+		roles = []string{}
 	}
 
 	claims := security.JWTClaims{
@@ -507,6 +570,7 @@ func (s *Service) RefreshSession(ctx context.Context, req RefreshRequest) (*Logi
 		IssuedAt:  now.Unix(),
 		ExpiresAt: now.Add(jwtDuration).Unix(),
 		Roles:     roles,
+		Scopes:    domain.DefaultScopesForRoles(roles),
 		AMR:       []string{"refresh"},
 		AuthTime:  now.Unix(),
 	}
@@ -603,7 +667,15 @@ func (s *Service) EnrollTOTP(ctx context.Context, req EnrollTOTPRequest) (*Enrol
 		return nil, err
 	}
 
-	otpauthURI := fmt.Sprintf("otpauth://totp/TopChoiceBank:%s?secret=%s&issuer=TopChoiceBank&algorithm=SHA1&digits=6&period=30", user.Email, secret)
+	q := url.Values{}
+	q.Set("secret", secret)
+	q.Set("issuer", "TopChoiceBank")
+	q.Set("algorithm", "SHA1")
+	q.Set("digits", "6")
+	q.Set("period", "30")
+
+	labelSegment := url.PathEscape("TopChoiceBank:" + user.Email)
+	otpauthURI := fmt.Sprintf("otpauth://totp/%s?%s", labelSegment, q.Encode())
 
 	return &EnrollTOTPResponse{
 		FactorID:    factor.ID(),
@@ -627,12 +699,20 @@ func (s *Service) VerifyTOTP(ctx context.Context, req VerifyTOTPRequest) (*Verif
 		return nil, errors.New("no pending mfa factor found for verification")
 	}
 
+	if strings.TrimSpace(req.FactorID) != "" && req.FactorID != factor.ID() {
+		return nil, errors.New("factor ID does not match pending factor")
+	}
+
+	now := time.Now().UTC()
+	if now.After(factor.CreatedAt().Add(15 * time.Minute)) {
+		return nil, domain.ErrMFAEnrollmentExpired
+	}
+
 	secretBytes, err := s.encryptor.Decrypt(ctx, factor.EncryptedSecret(), factor.KeyVersion())
 	if err != nil {
 		return nil, fmt.Errorf("failed to decrypt factor secret: %w", err)
 	}
 
-	now := time.Now().UTC()
 	valid, err := domain.VerifyTOTPCode(string(secretBytes), req.TOTPCode, now)
 	if err != nil || !valid {
 		_ = s.repo.RecordSecurityEvent(ctx, req.UserID, "identity.mfa_verify_failed.v1", "FAILURE", req.RequestID, req.RequestIP, map[string]any{"reason": "invalid_code"})
@@ -702,6 +782,7 @@ func (s *Service) ChangePassword(ctx context.Context, req ChangePasswordRequest)
 	}
 
 	now := time.Now().UTC()
+	var backupHash []byte
 	if activeFactor != nil {
 		if req.RecentMFA {
 			// recent MFA verification claim satisfied
@@ -715,9 +796,7 @@ func (s *Service) ChangePassword(ctx context.Context, req ChangePasswordRequest)
 				return nil, domain.ErrInvalidTOTPCode
 			}
 		} else if strings.TrimSpace(req.BackupCode) != "" {
-			if err := s.ConsumeBackupCode(ctx, req.UserID, req.BackupCode); err != nil {
-				return nil, err
-			}
+			backupHash = domain.HashBackupCode(req.BackupCode)
 		} else {
 			return nil, errors.New("recent mfa verification or totp code required")
 		}
@@ -736,22 +815,21 @@ func (s *Service) ChangePassword(ctx context.Context, req ChangePasswordRequest)
 	}
 
 	outboxEvent := platformdb.OutboxEventInput{
-		AggregateType:    "identity.users",
-		AggregateID:      user.ID,
-		AggregateVersion: user.Version + 1,
-		EventType:        "identity.password_changed.v1",
-		SchemaVersion:    1,
+		AggregateType: "identity.users",
+		AggregateID:   user.ID,
+		EventType:     "identity.password_changed.v1",
+		SchemaVersion: 1,
 		Payload: map[string]any{
 			"user_id": user.ID,
 		},
 		OccurredAt: now,
 	}
 
-	if err := s.repo.UpdatePasswordWithOutbox(ctx, user.ID, newHash, outboxEvent); err != nil {
+	revokedCount, err := s.repo.RotatePasswordTx(ctx, user.ID, newHash, backupHash, outboxEvent)
+	if err != nil {
 		return nil, err
 	}
 
-	revokedCount, _ := s.repo.RevokeAllRefreshFamilies(ctx, user.ID, "password_changed")
 	_ = s.repo.RecordSecurityEvent(ctx, req.UserID, "identity.password_changed.v1", "SUCCESS", req.RequestID, req.RequestIP, nil)
 
 	return &ChangePasswordResponse{

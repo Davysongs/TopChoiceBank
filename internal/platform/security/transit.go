@@ -24,8 +24,8 @@ type TransitEncryptor interface {
 
 // AESGCMTransitEncryptor implements TransitEncryptor using authenticated AES-256-GCM with key versioning.
 type AESGCMTransitEncryptor struct {
-	key        []byte
-	keyVersion int
+	keys           map[int][]byte
+	currentVersion int
 }
 
 // NewAESGCMTransitEncryptor creates a TransitEncryptor backed by a 32-byte key.
@@ -43,14 +43,34 @@ func NewAESGCMTransitEncryptor(secret string, keyVersion int) (*AESGCMTransitEnc
 	copy(key, h[:])
 
 	return &AESGCMTransitEncryptor{
-		key:        key,
-		keyVersion: keyVersion,
+		keys:           map[int][]byte{keyVersion: key},
+		currentVersion: keyVersion,
 	}, nil
+}
+
+// AddKeyVersion registers an additional key version to support decryption of previously encrypted secrets after key rotation.
+func (t *AESGCMTransitEncryptor) AddKeyVersion(keyVersion int, secret string) error {
+	if secret == "" {
+		return errors.New("transit encryption secret cannot be empty")
+	}
+	if keyVersion < 1 {
+		return errors.New("key version must be positive")
+	}
+	h := sha256.Sum256([]byte(secret))
+	key := make([]byte, 32)
+	copy(key, h[:])
+	t.keys[keyVersion] = key
+	return nil
 }
 
 // Encrypt encrypts plaintext using AES-256-GCM and prepends the random 12-byte nonce.
 func (t *AESGCMTransitEncryptor) Encrypt(ctx context.Context, plaintext []byte) ([]byte, int, error) {
-	block, err := aes.NewCipher(t.key)
+	key, ok := t.keys[t.currentVersion]
+	if !ok {
+		return nil, 0, ErrInvalidKeyVersion
+	}
+
+	block, err := aes.NewCipher(key)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to create aes cipher: %w", err)
 	}
@@ -66,16 +86,17 @@ func (t *AESGCMTransitEncryptor) Encrypt(ctx context.Context, plaintext []byte) 
 	}
 
 	ciphertext := gcm.Seal(nonce, nonce, plaintext, nil)
-	return ciphertext, t.keyVersion, nil
+	return ciphertext, t.currentVersion, nil
 }
 
 // Decrypt decrypts an authenticated ciphertext using the corresponding key version.
 func (t *AESGCMTransitEncryptor) Decrypt(ctx context.Context, ciphertext []byte, keyVersion int) ([]byte, error) {
-	if keyVersion != t.keyVersion {
+	key, ok := t.keys[keyVersion]
+	if !ok {
 		return nil, ErrInvalidKeyVersion
 	}
 
-	block, err := aes.NewCipher(t.key)
+	block, err := aes.NewCipher(key)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create aes cipher: %w", err)
 	}

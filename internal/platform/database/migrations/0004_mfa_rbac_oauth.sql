@@ -12,11 +12,14 @@ CREATE TABLE IF NOT EXISTS identity.mfa_factors (
     CHECK (status IN ('PENDING','ACTIVE','REVOKED')),
   verified_at timestamptz,
   revoked_at timestamptz,
+  last_totp_step bigint DEFAULT 0,
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   UNIQUE (user_id, label),
   CHECK ((status = 'ACTIVE' AND verified_at IS NOT NULL) OR status <> 'ACTIVE'),
   CHECK ((status = 'REVOKED' AND revoked_at IS NOT NULL) OR status <> 'REVOKED')
 );
+
+ALTER TABLE identity.mfa_factors ADD COLUMN IF NOT EXISTS last_totp_step bigint DEFAULT 0;
 
 CREATE UNIQUE INDEX IF NOT EXISTS mfa_one_active_totp_idx
   ON identity.mfa_factors (user_id, factor_type) WHERE status = 'ACTIVE';

@@ -283,11 +283,15 @@ func handleMFAVerify(service *identity.Service) http.HandlerFunc {
 				writeProblem(w, http.StatusUnauthorized, "Invalid Code", "Invalid or expired TOTP verification code", r.URL.Path)
 				return
 			}
+			if errors.Is(err, domain.ErrMFAEnrollmentExpired) {
+				writeProblem(w, http.StatusBadRequest, "Enrollment Expired", "MFA enrollment session has expired; please initiate enrollment again", r.URL.Path)
+				return
+			}
 			if errors.Is(err, domain.ErrFactorAlreadyActive) || errors.Is(err, domain.ErrFactorNotPending) {
 				writeProblem(w, http.StatusConflict, "Factor State Conflict", err.Error(), r.URL.Path)
 				return
 			}
-			if strings.Contains(err.Error(), "no pending mfa factor found") {
+			if strings.Contains(err.Error(), "no pending mfa factor found") || strings.Contains(err.Error(), "does not match") {
 				writeProblem(w, http.StatusNotFound, "Factor Not Found", "No pending MFA factor found for verification", r.URL.Path)
 				return
 			}
