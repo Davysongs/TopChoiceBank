@@ -166,6 +166,10 @@ func (s *PostgresOAuthStore) GetClient(ctx context.Context, id string) (fosite.C
 
 // CreateAuthorizeCodeSession stores the authorization code session in memory and PostgreSQL.
 func (s *PostgresOAuthStore) CreateAuthorizeCodeSession(ctx context.Context, code string, req fosite.Requester) error {
+	codeHash := sha256.Sum256([]byte(code))
+	stableID := hex.EncodeToString(codeHash[:])
+	req.SetID(stableID)
+
 	pkceChallenge := req.GetRequestForm().Get("code_challenge")
 	pkceMethod := req.GetRequestForm().Get("code_challenge_method")
 	if pkceMethod == "" {
@@ -180,7 +184,6 @@ func (s *PostgresOAuthStore) CreateAuthorizeCodeSession(ctx context.Context, cod
 		return nil
 	}
 
-	codeHash := sha256.Sum256([]byte(code))
 	clientID := req.GetClient().GetID()
 
 	var clientUUID string
@@ -458,14 +461,41 @@ func (s *PostgresOAuthStore) CreateAccessTokenSession(ctx context.Context, signa
 		}
 	}
 
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	if reqID != "" {
+		_, err = tx.ExecContext(ctx, "SELECT pg_advisory_xact_lock(hashtext($1))", reqID)
+		if err != nil {
+			return fmt.Errorf("failed to acquire advisory lock: %w", err)
+		}
+	}
+
+	isRevoked := false
+	if codeHash, decErr := hex.DecodeString(reqID); decErr == nil && len(codeHash) == 32 {
+		var revokedAt sql.NullTime
+		err = tx.QueryRowContext(ctx, `
+			SELECT revoked_at
+			FROM identity.oauth_authorization_codes
+			WHERE code_hash = $1
+			FOR UPDATE
+		`, codeHash).Scan(&revokedAt)
+		if err == nil && revokedAt.Valid {
+			isRevoked = true
+		}
+	}
+
 	query := `
 		INSERT INTO identity.oauth_access_tokens (
 			signature_hash, request_id, client_id, user_id, scopes,
 			requested_at, expires_at, revoked
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, false)
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		ON CONFLICT (signature_hash) DO NOTHING
 	`
-	_, err := s.db.ExecContext(ctx, query,
+	_, err = tx.ExecContext(ctx, query,
 		sigHash[:],
 		reqID,
 		clientID,
@@ -473,9 +503,18 @@ func (s *PostgresOAuthStore) CreateAccessTokenSession(ctx context.Context, signa
 		pq.Array(scopes),
 		requestedAt,
 		expiresAt,
+		isRevoked,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to persist access token: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit access token session: %w", err)
+	}
+
+	if isRevoked {
+		_ = s.MemoryStore.RevokeAccessToken(ctx, reqID)
 	}
 
 	return nil
@@ -531,9 +570,10 @@ func (s *PostgresOAuthStore) GetAccessTokenSession(ctx context.Context, signatur
 			}
 			return reconstructed, nil
 		}
-		if !errors.Is(err, sql.ErrNoRows) {
-			return nil, fmt.Errorf("failed to query access token: %w", err)
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, fosite.ErrNotFound
 		}
+		return nil, fmt.Errorf("failed to query access token: %w", err)
 	}
 
 	return s.MemoryStore.GetAccessTokenSession(ctx, signature, session)
@@ -559,10 +599,36 @@ func (s *PostgresOAuthStore) RevokeAccessToken(ctx context.Context, requestID st
 	_ = s.MemoryStore.RevokeAccessToken(ctx, requestID)
 
 	if s.db != nil {
-		_, err := s.db.ExecContext(ctx, "UPDATE identity.oauth_access_tokens SET revoked = true WHERE request_id = $1", requestID)
+		tx, err := s.db.BeginTx(ctx, nil)
+		if err != nil {
+			return err
+		}
+		defer tx.Rollback()
+
+		if requestID != "" {
+			_, err = tx.ExecContext(ctx, "SELECT pg_advisory_xact_lock(hashtext($1))", requestID)
+			if err != nil {
+				return fmt.Errorf("failed to acquire advisory lock: %w", err)
+			}
+		}
+
+		if codeHash, decErr := hex.DecodeString(requestID); decErr == nil && len(codeHash) == 32 {
+			_, err = tx.ExecContext(ctx, `
+				UPDATE identity.oauth_authorization_codes
+				SET revoked_at = clock_timestamp()
+				WHERE code_hash = $1
+			`, codeHash)
+			if err != nil {
+				return fmt.Errorf("failed to mark authorization code revoked: %w", err)
+			}
+		}
+
+		_, err = tx.ExecContext(ctx, "UPDATE identity.oauth_access_tokens SET revoked = true WHERE request_id = $1", requestID)
 		if err != nil {
 			return fmt.Errorf("failed to revoke access token in postgres: %w", err)
 		}
+
+		return tx.Commit()
 	}
 
 	return nil

@@ -64,8 +64,11 @@ CREATE TABLE IF NOT EXISTS identity.oauth_authorization_codes (
   issued_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   expires_at timestamptz NOT NULL,
   used_at timestamptz,
+  revoked_at timestamptz,
   CHECK (expires_at > issued_at)
 );
+
+ALTER TABLE identity.oauth_authorization_codes ADD COLUMN IF NOT EXISTS revoked_at timestamptz;
 
 CREATE INDEX IF NOT EXISTS oauth_codes_expiry_idx ON identity.oauth_authorization_codes (expires_at)
   WHERE used_at IS NULL;

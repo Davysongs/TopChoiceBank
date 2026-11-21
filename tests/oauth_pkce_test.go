@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -22,6 +23,7 @@ import (
 	platformdb "github.com/Davysongs/TopChoiceBank/internal/platform/database"
 	platformhttp "github.com/Davysongs/TopChoiceBank/internal/platform/http"
 	"github.com/Davysongs/TopChoiceBank/internal/platform/logging"
+	"github.com/Davysongs/TopChoiceBank/internal/users"
 )
 
 // generateTestPKCE produces a valid verifier and its S256 code challenge.
@@ -277,7 +279,7 @@ func TestOAuth2_SecurityRejections(t *testing.T) {
 		RedirectURIs:  []string{validRedirectURI},
 		GrantTypes:    []string{"authorization_code"},
 		ResponseTypes: []string{"code"},
-		Scopes:        []string{"accounts:read"},
+		Scopes:        []string{"accounts:read", "profile:read", "profile:write"},
 		Public:        true,
 	}
 	_ = adapter.Store().RegisterClient(context.Background(), client, "Security Test Client")
@@ -521,5 +523,68 @@ func TestOAuth2_SecurityRejections(t *testing.T) {
 	defer respA.Body.Close()
 	if respA.StatusCode != http.StatusOK {
 		t.Fatalf("expected 200 OK calling instance A with token issued by instance B, got %d", respA.StatusCode)
+	}
+
+	// 8. Verify deleted PostgreSQL token returns ErrNotFound without consulting MemoryStore
+	sigHashB := sha256.Sum256([]byte(accessTokenB))
+	_, err = db.ExecContext(context.Background(), "DELETE FROM identity.oauth_access_tokens WHERE signature_hash = $1", sigHashB[:])
+	if err != nil {
+		t.Fatalf("failed to delete access token from DB: %v", err)
+	}
+	_, getErr := adapterB.Store().GetAccessTokenSession(context.Background(), accessTokenB, &fosite.DefaultSession{})
+	if !errors.Is(getErr, fosite.ErrNotFound) {
+		t.Fatalf("expected fosite.ErrNotFound for deleted DB token, got: %v", getErr)
+	}
+
+	// 9. Verify OAuth token with profile:read receives 403 on PATCH /v1/users/me
+	readOnlyConsentParams := url.Values{
+		"client_id":             {clientID},
+		"redirect_uri":          {validRedirectURI},
+		"response_type":         {"code"},
+		"scope":                 {"profile:read"},
+		"state":                 {"state-ro-123"},
+		"code_challenge":        {challenge},
+		"code_challenge_method": {"S256"},
+	}
+	codeRO := getAuthCodeViaConsent(readOnlyConsentParams)
+	exchangeROParams := url.Values{
+		"grant_type":    {"authorization_code"},
+		"code":          {codeRO},
+		"redirect_uri":  {validRedirectURI},
+		"client_id":     {clientID},
+		"code_verifier": {verifier},
+	}
+	respRO, err := http.PostForm(server.URL+"/v1/oauth/token", exchangeROParams)
+	if err != nil {
+		t.Fatalf("RO exchange failed: %v", err)
+	}
+	defer respRO.Body.Close()
+	var roData map[string]any
+	_ = json.NewDecoder(respRO.Body).Decode(&roData)
+	tokenRO, _ := roData["access_token"].(string)
+	if tokenRO == "" {
+		t.Fatal("expected access_token for profile:read")
+	}
+
+	userRouter := platformhttp.NewRouter()
+	platformhttp.RegisterOAuthRoutes(userRouter, adapter, "integration-test-jwt-secret-key-32bytes")
+	identityRepo := identity.NewPostgresRepository(db)
+	userRepo := users.NewPostgresRepository(db)
+	userService := users.NewService(userRepo, identityRepo)
+	platformhttp.RegisterUserRoutes(userRouter, userService, "integration-test-jwt-secret-key-32bytes")
+	userServer := httptest.NewServer(userRouter.Handler())
+	defer userServer.Close()
+
+	patchReqRO, _ := http.NewRequest(http.MethodPatch, userServer.URL+"/v1/users/me", bytes.NewReader([]byte(`{"phone_e164":"+12025550199"}`)))
+	patchReqRO.Header.Set("Authorization", "Bearer "+tokenRO)
+	patchReqRO.Header.Set("Content-Type", "application/json")
+	patchReqRO.Header.Set("If-Match", `"1"`)
+	patchRespRO, err := http.DefaultClient.Do(patchReqRO)
+	if err != nil {
+		t.Fatalf("PATCH request failed: %v", err)
+	}
+	defer patchRespRO.Body.Close()
+	if patchRespRO.StatusCode != http.StatusForbidden {
+		t.Fatalf("expected 403 Forbidden for PATCH with profile:read only token, got %d", patchRespRO.StatusCode)
 	}
 }
