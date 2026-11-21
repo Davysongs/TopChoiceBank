@@ -346,8 +346,10 @@ func (s *Service) Login(ctx context.Context, req LoginRequest) (*LoginResponse, 
 
 	roles, err := s.repo.GetUserRoles(ctx, user.ID)
 	if err != nil || len(roles) == 0 {
-		roles = []string{"customer"}
+		roles = []string{domain.RoleCustomer}
 	}
+
+	scopes := domain.DefaultScopesForRoles(roles)
 
 	amr := []string{"pwd"}
 	if mfaVerified {
@@ -361,6 +363,7 @@ func (s *Service) Login(ctx context.Context, req LoginRequest) (*LoginResponse, 
 		IssuedAt:  now.Unix(),
 		ExpiresAt: now.Add(jwtDuration).Unix(),
 		Roles:     roles,
+		Scopes:    scopes,
 		AMR:       amr,
 		AuthTime:  now.Unix(),
 	}
