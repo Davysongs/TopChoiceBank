@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/ory/fosite"
 	"github.com/ory/fosite/compose"
 	"github.com/ory/fosite/handler/openid"
@@ -20,6 +21,7 @@ import (
 
 // ConsentClaims contains the validated OAuth parameters bundled into a one-time consent token.
 type ConsentClaims struct {
+	ConsentID           string    `json:"consent_id"`
 	UserID              string    `json:"user_id"`
 	ClientID            string    `json:"client_id"`
 	RedirectURI         string    `json:"redirect_uri"`
@@ -53,14 +55,21 @@ func NewOAuthAdapter(db *sql.DB, secret string) *OAuthAdapter {
 		AuthorizeCodeLifespan:          10 * time.Minute,
 		AccessTokenLifespan:            1 * time.Hour,
 		RedirectSecureChecker: func(ctx context.Context, u *url.URL) bool {
-			return true // allow http/https in dev and test environments
+			if u == nil {
+				return false
+			}
+			if strings.EqualFold(u.Scheme, "https") {
+				return true
+			}
+			host := u.Hostname()
+			return host == "localhost" || host == "127.0.0.1" || host == "::1"
 		},
 	}
 
 	store := NewPostgresOAuthStore(db)
 	strategy := compose.NewOAuth2HMACStrategy(config)
 
-	// Compose ONLY Authorize Code Explicit and PKCE factories.
+	// Compose Authorize Code Explicit, PKCE, and Token Introspection factories.
 	// Implicit and Resource Owner Password grants are omitted by design.
 	oauth2Provider := compose.Compose(
 		config,
@@ -68,6 +77,7 @@ func NewOAuthAdapter(db *sql.DB, secret string) *OAuthAdapter {
 		strategy,
 		compose.OAuth2AuthorizeExplicitFactory,
 		compose.OAuth2PKCEFactory,
+		compose.OAuth2TokenIntrospectionFactory,
 	)
 
 	return &OAuthAdapter{
@@ -94,6 +104,7 @@ func (a *OAuthAdapter) GenerateConsentToken(
 	state, codeChallenge, codeChallengeMethod string,
 ) (string, error) {
 	claims := ConsentClaims{
+		ConsentID:           uuid.New().String(),
 		UserID:              userID,
 		ClientID:            clientID,
 		RedirectURI:         redirectURI,

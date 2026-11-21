@@ -2,6 +2,7 @@ package platformhttp
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -11,10 +12,24 @@ import (
 	"github.com/ory/fosite"
 
 	"github.com/Davysongs/TopChoiceBank/internal/identity/adapters/oauth"
+	"github.com/Davysongs/TopChoiceBank/internal/platform/security"
 )
 
 // RegisterOAuthRoutes registers the OAuth 2.0 authorization and token endpoints on the router.
 func RegisterOAuthRoutes(router *Router, adapter *oauth.OAuthAdapter, jwtSecret string) {
+	RegisterOAuthTokenVerifier(func(ctx context.Context, tokenStr string) (*security.JWTClaims, error) {
+		session := &fosite.DefaultSession{}
+		_, ar, err := adapter.Provider().IntrospectToken(ctx, tokenStr, fosite.AccessToken, session)
+		if err != nil {
+			return nil, err
+		}
+		return &security.JWTClaims{
+			Subject: ar.GetSession().GetSubject(),
+			Scopes:  ar.GetGrantedScopes(),
+			Issuer:  "topchoicebank",
+		}, nil
+	})
+
 	router.HandleFunc("/v1/oauth/authorize", handleOAuthAuthorize(adapter, jwtSecret))
 	router.HandleFunc("/v1/oauth/token", handleOAuthToken(adapter))
 }
@@ -69,25 +84,6 @@ func handleOAuthAuthorizeGet(w http.ResponseWriter, r *http.Request, adapter *oa
 		requestedScopes = append(requestedScopes, sc)
 	}
 
-	// Check if consent was pre-approved or auto-approved
-	if r.URL.Query().Get("consent") == "approve" || r.URL.Query().Get("auto_approve") == "true" {
-		session := adapter.NewSession(claims.Subject)
-		for _, sc := range requestedScopes {
-			ar.GrantScope(sc)
-		}
-		resp, err := adapter.Provider().NewAuthorizeResponse(r.Context(), ar, session)
-		if err != nil {
-			detail := err.Error()
-			if rfcErr, ok := err.(*fosite.RFC6749Error); ok {
-				detail = rfcErr.Error() + ": " + rfcErr.HintField + " - " + rfcErr.DebugField
-			}
-			writeProblem(w, http.StatusInternalServerError, "Internal Server Error", "Failed to generate authorize response: "+detail, r.URL.Path)
-			return
-		}
-		adapter.Provider().WriteAuthorizeResponse(r.Context(), w, ar, resp)
-		return
-	}
-
 	consentToken, err := adapter.GenerateConsentToken(
 		claims.Subject,
 		client.GetID(),
@@ -124,28 +120,47 @@ func handleOAuthAuthorizePost(w http.ResponseWriter, r *http.Request, adapter *o
 		return
 	}
 
-	if len(bodyBytes) > 0 {
-		_ = json.Unmarshal(bodyBytes, &body)
+	contentType := r.Header.Get("Content-Type")
+	if strings.Contains(contentType, "application/json") {
+		if err := json.Unmarshal(bodyBytes, &body); err != nil {
+			writeProblem(w, http.StatusBadRequest, "Malformed JSON", "Request body must be valid JSON", r.URL.Path)
+			return
+		}
+	} else {
+		parsedForm, err := url.ParseQuery(string(bodyBytes))
+		if err != nil {
+			writeProblem(w, http.StatusBadRequest, "Malformed Form", "Invalid form body", r.URL.Path)
+			return
+		}
+		body.ConsentToken = parsedForm.Get("consent_token")
+		approvedVal := parsedForm.Get("approved")
+		if approvedVal == "true" || approvedVal == "1" {
+			t := true
+			body.Approved = &t
+		} else if approvedVal != "" {
+			f := false
+			body.Approved = &f
+		}
 	}
 
-	consentToken := body.ConsentToken
-	if consentToken == "" {
-		consentToken = r.FormValue("consent_token")
-	}
-
-	if consentToken == "" {
+	if body.ConsentToken == "" {
 		writeProblem(w, http.StatusBadRequest, "Validation Error", "consent_token is required", r.URL.Path)
 		return
 	}
 
-	claims, err := adapter.ValidateConsentToken(consentToken)
+	claims, err := adapter.ValidateConsentToken(body.ConsentToken)
 	if err != nil {
 		writeProblem(w, http.StatusBadRequest, "Invalid Consent Token", err.Error(), r.URL.Path)
 		return
 	}
 
-	if body.Approved != nil && !*body.Approved {
-		writeProblem(w, http.StatusForbidden, "Consent Denied", "End-user declined authorization consent", r.URL.Path)
+	if err := adapter.Store().ConsumeConsentID(r.Context(), claims.ConsentID); err != nil {
+		writeProblem(w, http.StatusConflict, "Consent Consumed", err.Error(), r.URL.Path)
+		return
+	}
+
+	if body.Approved == nil || !*body.Approved {
+		writeProblem(w, http.StatusForbidden, "Consent Denied", "End-user declined or did not grant authorization consent", r.URL.Path)
 		return
 	}
 

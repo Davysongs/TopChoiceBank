@@ -70,6 +70,12 @@ CREATE TABLE IF NOT EXISTS identity.oauth_authorization_codes (
 CREATE INDEX IF NOT EXISTS oauth_codes_expiry_idx ON identity.oauth_authorization_codes (expires_at)
   WHERE used_at IS NULL;
 
+-- identity.oauth_consumed_consents
+CREATE TABLE IF NOT EXISTS identity.oauth_consumed_consents (
+  consent_id uuid PRIMARY KEY,
+  consumed_at timestamptz NOT NULL DEFAULT clock_timestamp()
+);
+
 -- Covering index on active user roles
 CREATE INDEX IF NOT EXISTS user_roles_active_role_idx ON identity.user_roles (role_id, user_id)
   WHERE revoked_at IS NULL;

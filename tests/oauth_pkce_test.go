@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -53,6 +54,18 @@ func setupOAuthTestServer(t *testing.T) (*httptest.Server, *oauth.OAuthAdapter, 
 
 	adapter := oauth.NewOAuthAdapter(db, jwtSecret)
 	platformhttp.RegisterOAuthRoutes(router, adapter, jwtSecret)
+
+	// Register test endpoint protected with RequireAuth and accounts:read scope
+	router.Handle("/v1/accounts/test", platformhttp.RequireAuth(jwtSecret)(platformhttp.RequireScopes("accounts:read")(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		claims, ok := platformhttp.ClaimsFromContext(r.Context())
+		if !ok || claims == nil {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(fmt.Sprintf(`{"account_id":"acc-123","subject":"%s"}`, claims.Subject)))
+	}))))
 
 	oauthServer := httptest.NewServer(router.Handler())
 	return oauthServer, adapter, svc
@@ -170,6 +183,20 @@ func TestOAuth2_S256PKCE_CodeExchangeAndReplayPrevention(t *testing.T) {
 		t.Fatalf("expected state %s, got %s", state, parsedLoc.Query().Get("state"))
 	}
 
+	// 4b. Submitting the same consent token again must be rejected (single-use enforcement)
+	respConsentReplay, err := noRedirectClient.Post(
+		server.URL+"/v1/oauth/authorize",
+		"application/json",
+		bytes.NewBuffer(consentPayload),
+	)
+	if err != nil {
+		t.Fatalf("failed to post replayed consent: %v", err)
+	}
+	defer respConsentReplay.Body.Close()
+	if respConsentReplay.StatusCode != http.StatusConflict {
+		t.Fatalf("expected 409 Conflict for replayed consent token, got %d", respConsentReplay.StatusCode)
+	}
+
 	// 5. Exchange code for tokens (POST /v1/oauth/token)
 	tokenParams := url.Values{
 		"grant_type":    {"authorization_code"},
@@ -206,6 +233,20 @@ func TestOAuth2_S256PKCE_CodeExchangeAndReplayPrevention(t *testing.T) {
 	}
 	if !strings.EqualFold(tokenData.TokenType, "bearer") {
 		t.Fatalf("expected token_type bearer (case-insensitive), got %s", tokenData.TokenType)
+	}
+
+	// 5b. Verify OAuth access token can authorize protected API endpoints enforcing accounts:read
+	reqResource, _ := http.NewRequest(http.MethodGet, server.URL+"/v1/accounts/test", nil)
+	reqResource.Header.Set("Authorization", "Bearer "+tokenData.AccessToken)
+	respResource, err := http.DefaultClient.Do(reqResource)
+	if err != nil {
+		t.Fatalf("failed to call protected resource with oauth token: %v", err)
+	}
+	defer respResource.Body.Close()
+	if respResource.StatusCode != http.StatusOK {
+		var buf bytes.Buffer
+		_, _ = buf.ReadFrom(respResource.Body)
+		t.Fatalf("expected 200 OK accessing protected resource with oauth token, got %d: %s", respResource.StatusCode, buf.String())
 	}
 
 	// 6. Single-use authorization code enforcement: Replaying the code must fail
@@ -320,19 +361,57 @@ func TestOAuth2_SecurityRejections(t *testing.T) {
 			return http.ErrUseLastResponse
 		},
 	}
-	reqAuto, _ := http.NewRequest(http.MethodGet, server.URL+"/v1/oauth/authorize?"+autoApproveParams.Encode(), nil)
-	reqAuto.Header.Set("Authorization", "Bearer "+userToken)
-	respAuto, err := noRedirectClient.Do(reqAuto)
-	if err != nil {
-		t.Fatalf("auto-consent request failed: %v", err)
-	}
-	defer respAuto.Body.Close()
 
-	loc, _ := url.Parse(respAuto.Header.Get("Location"))
-	code := loc.Query().Get("code")
-	if code == "" {
-		t.Fatal("expected code from auto-consent")
+	// Helper to obtain authorization code through explicit consent confirmation
+	getAuthCodeViaConsent := func(params url.Values) string {
+		req, err := http.NewRequest(http.MethodGet, server.URL+"/v1/oauth/authorize?"+params.Encode(), nil)
+		if err != nil {
+			t.Fatalf("failed to create authorize request: %v", err)
+		}
+		req.Header.Set("Authorization", "Bearer "+userToken)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("authorize get failed: %v", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			var buf bytes.Buffer
+			_, _ = buf.ReadFrom(resp.Body)
+			t.Fatalf("expected 200 from authorize get, got %d: %s", resp.StatusCode, buf.String())
+		}
+
+		var data struct {
+			ConsentToken string `json:"consent_token"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+			t.Fatalf("failed to decode consent token: %v", err)
+		}
+
+		consentPayload, _ := json.Marshal(map[string]any{
+			"consent_token": data.ConsentToken,
+			"approved":      true,
+		})
+
+		respConsent, err := noRedirectClient.Post(
+			server.URL+"/v1/oauth/authorize",
+			"application/json",
+			bytes.NewBuffer(consentPayload),
+		)
+		if err != nil {
+			t.Fatalf("failed to post consent: %v", err)
+		}
+		defer respConsent.Body.Close()
+
+		loc, _ := url.Parse(respConsent.Header.Get("Location"))
+		authCode := loc.Query().Get("code")
+		if authCode == "" {
+			t.Fatalf("expected code in redirect location: %s", respConsent.Header.Get("Location"))
+		}
+		return authCode
 	}
+
+	code := getAuthCodeViaConsent(autoApproveParams)
 
 	badVerifierParams := url.Values{
 		"grant_type":    {"authorization_code"},
@@ -352,19 +431,7 @@ func TestOAuth2_SecurityRejections(t *testing.T) {
 	}
 
 	// 5. Code exchange with valid PKCE verifier succeeds (using a fresh authorization code)
-	reqAutoValid, _ := http.NewRequest(http.MethodGet, server.URL+"/v1/oauth/authorize?"+autoApproveParams.Encode(), nil)
-	reqAutoValid.Header.Set("Authorization", "Bearer "+userToken)
-	respAutoValid, err := noRedirectClient.Do(reqAutoValid)
-	if err != nil {
-		t.Fatalf("auto-consent request for valid code failed: %v", err)
-	}
-	defer respAutoValid.Body.Close()
-
-	locValid, _ := url.Parse(respAutoValid.Header.Get("Location"))
-	validCode := locValid.Query().Get("code")
-	if validCode == "" {
-		t.Fatal("expected validCode from auto-consent")
-	}
+	validCode := getAuthCodeViaConsent(autoApproveParams)
 
 	goodVerifierParams := url.Values{
 		"grant_type":    {"authorization_code"},
