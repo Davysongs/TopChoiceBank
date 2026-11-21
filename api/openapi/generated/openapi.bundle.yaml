@@ -1,12 +1,24 @@
 openapi: 3.0.3
 info:
   title: TopChoiceBank v2
-  version: 0.0.0
-  description: Foundation API for TopChoiceBank v2
+  version: 0.1.0
+  description: Core banking, identity, customer profile, and partner OAuth API for TopChoiceBank v2
+  license:
+    name: Proprietary
+    url: https://topchoicebank.com/terms
+servers:
+  - url: https://api.topchoicebank.com
+    description: Production server
+  - url: http://127.0.0.1:8080
+    description: Local development server
 paths:
   /health:
     get:
       summary: Health check
+      operationId: getHealth
+      tags:
+        - System
+      security: []
       responses:
         '200':
           description: Service is healthy
@@ -18,10 +30,1050 @@ paths:
                   status:
                     type: string
                     example: ok
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '500':
+          description: Service is unhealthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
   /healthz:
     get:
-      summary: Health check
+      summary: Kubernetes liveness probe
+      operationId: getHealthz
+      tags:
+        - System
+      security: []
       responses:
         '200':
           description: Service is healthy
-components: {}
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '500':
+          description: Service is unhealthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /v1/auth/register:
+    post:
+      summary: Register a new user credential and profile shell
+      operationId: registerUser
+      tags:
+        - Authentication
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: User credential created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegisterResponse'
+        '400':
+          description: Malformed JSON or invalid syntax
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '409':
+          description: Email already registered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '422':
+          description: Password or email policy validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /v1/auth/login:
+    post:
+      summary: Authenticate credentials and start a rotating refresh-token family
+      operationId: loginUser
+      tags:
+        - Authentication
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Authentication successful or MFA verification challenge required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '400':
+          description: Malformed JSON or invalid syntax
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '401':
+          description: Invalid email, password, or verification code
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '403':
+          description: Account locked or disabled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /v1/auth/refresh:
+    post:
+      summary: Rotate a valid refresh token and issue a new access token
+      operationId: refreshSession
+      tags:
+        - Authentication
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshRequest'
+      responses:
+        '200':
+          description: Session refreshed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '400':
+          description: Malformed JSON or invalid syntax
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '401':
+          description: Invalid, expired, or reused refresh token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '403':
+          description: Account locked or disabled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /v1/auth/mfa/enrol:
+    post:
+      summary: Initiate TOTP MFA factor enrollment and return secret URI and backup codes
+      operationId: enrollMFA
+      tags:
+        - Authentication
+        - Multi-Factor Authentication
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MFAEnrollRequest'
+      responses:
+        '200':
+          description: MFA enrollment initiated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MFAEnrollResponse'
+        '400':
+          description: Missing password confirmation or malformed JSON
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '401':
+          description: Password confirmation failed or unauthorized token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '409':
+          description: An active MFA factor already exists for this account
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '422':
+          description: Invalid factor label
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /v1/auth/mfa/verify:
+    post:
+      summary: Verify pending TOTP code and activate MFA factor
+      operationId: verifyMFA
+      tags:
+        - Authentication
+        - Multi-Factor Authentication
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MFAVerifyRequest'
+      responses:
+        '200':
+          description: MFA factor verified and activated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MFAVerifyResponse'
+        '400':
+          description: Enrollment expired or invalid code format
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '401':
+          description: Invalid or expired TOTP verification code
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '404':
+          description: Pending MFA factor not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '409':
+          description: Factor state conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /v1/auth/password/change:
+    post:
+      summary: Rotate account password with recent-MFA or step-up TOTP verification
+      operationId: changePassword
+      tags:
+        - Authentication
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasswordChangeRequest'
+      responses:
+        '200':
+          description: Password rotated successfully and previous sessions revoked
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PasswordChangeResponse'
+        '400':
+          description: Malformed JSON or missing required fields
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '401':
+          description: Invalid current password, TOTP code, or recent MFA required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '403':
+          description: Account locked due to failed attempts
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '422':
+          description: Weak password policy or password reuse violation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /v1/users/me:
+    get:
+      summary: Return the authenticated user's profile and onboarding state
+      operationId: getCurrentUserProfile
+      tags:
+        - Users & Profiles
+      security:
+        - BearerAuth: []
+        - OAuth2:
+            - profile:read
+      responses:
+        '200':
+          description: User profile retrieved successfully
+          headers:
+            ETag:
+              schema:
+                type: string
+              description: Entity tag representing profile version
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProfileResponse'
+        '401':
+          description: Missing, invalid, or expired access token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '403':
+          description: Insufficient scope (requires profile:read)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '404':
+          description: Profile not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+    patch:
+      summary: Update mutable contact and address fields using optimistic concurrency
+      operationId: updateCurrentUserProfile
+      tags:
+        - Users & Profiles
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: If-Match
+          in: header
+          required: true
+          description: Optimistic locking version of the profile
+          schema:
+            type: string
+            example: '1'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProfileRequest'
+      responses:
+        '200':
+          description: Profile updated successfully
+          headers:
+            ETag:
+              schema:
+                type: string
+              description: New entity tag representing updated profile version
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProfileResponse'
+        '400':
+          description: Missing If-Match header or malformed JSON
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '401':
+          description: Missing, invalid, or expired access token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '403':
+          description: Insufficient scope (requires profile:write) or attempting to modify immutable fields
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '404':
+          description: Profile not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '409':
+          description: Optimistic locking version conflict or phone already in use
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '422':
+          description: Validation error in phone number or address fields
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /v1/oauth/authorize:
+    get:
+      summary: Validate partner authorization request and generate consent prompt token
+      operationId: getOAuthAuthorize
+      tags:
+        - OAuth 2.0 PKCE
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: response_type
+          in: query
+          required: true
+          schema:
+            type: string
+            enum:
+              - code
+          example: code
+        - name: client_id
+          in: query
+          required: true
+          schema:
+            type: string
+          example: fintech-partner-app
+        - name: redirect_uri
+          in: query
+          required: true
+          schema:
+            type: string
+          example: https://partner.example.com/oauth/callback
+        - name: scope
+          in: query
+          required: true
+          schema:
+            type: string
+          example: accounts:read transfers:read
+        - name: state
+          in: query
+          required: true
+          schema:
+            type: string
+          example: xyz12345
+        - name: code_challenge
+          in: query
+          required: true
+          schema:
+            type: string
+          example: E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM
+        - name: code_challenge_method
+          in: query
+          required: true
+          schema:
+            type: string
+            enum:
+              - S256
+          example: S256
+      responses:
+        '200':
+          description: Authorization request validated; returns consent prompt details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OAuthAuthorizeConsentResponse'
+        '400':
+          description: Invalid request parameters, PKCE method, or redirect URI
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '401':
+          description: User authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+    post:
+      summary: Submit end-user consent decision and issue single-use authorization code
+      operationId: postOAuthAuthorizeConsent
+      tags:
+        - OAuth 2.0 PKCE
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OAuthAuthorizeConsentRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/OAuthAuthorizeConsentRequest'
+      responses:
+        '200':
+          description: Consent processed and authorization code issued
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  redirect_uri:
+                    type: string
+                    example: https://partner.example.com/oauth/callback?code=splat_code_xyz123&state=xyz12345
+        '302':
+          description: Redirect to partner redirect_uri with authorization code and state
+          headers:
+            Location:
+              schema:
+                type: string
+              description: Partner callback URL with code and state parameters
+        '400':
+          description: Missing or invalid consent token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '403':
+          description: User denied authorization consent
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '409':
+          description: Consent token already consumed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /v1/oauth/token:
+    post:
+      summary: Exchange authorization code with S256 PKCE verification for partner access token
+      operationId: exchangeOAuthToken
+      tags:
+        - OAuth 2.0 PKCE
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/OAuthTokenRequest'
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OAuthTokenRequest'
+      responses:
+        '200':
+          description: Authorization code verified; access token issued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OAuthTokenResponse'
+        '400':
+          description: Invalid authorization code, PKCE verifier mismatch, or expired code
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OAuthErrorResponse'
+        '401':
+          description: Client authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OAuthErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+components:
+  schemas:
+    RegisterRequest:
+      type: object
+      required:
+        - email
+        - password
+        - accepted_terms_version
+      properties:
+        email:
+          type: string
+          format: email
+          example: customer@example.com
+        password:
+          type: string
+          format: password
+          minLength: 8
+          example: SecureP@ssw0rd!2026
+        accepted_terms_version:
+          type: string
+          example: v2026.1
+    RegisterResponse:
+      type: object
+      required:
+        - user_id
+        - status
+        - email_verification_required
+      properties:
+        user_id:
+          type: string
+          format: uuid
+          example: 123e4567-e89b-12d3-a456-426614174000
+        status:
+          type: string
+          example: PENDING
+        email_verification_required:
+          type: boolean
+          example: true
+    LoginRequest:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+          example: customer@example.com
+        password:
+          type: string
+          format: password
+          example: SecureP@ssw0rd!2026
+        device_fingerprint:
+          type: string
+          example: fp_abc123xyz
+        totp_code:
+          type: string
+          example: '123456'
+        backup_code:
+          type: string
+          example: 01234567-89abcdef-01234567-89abcdef
+    LoginResponse:
+      type: object
+      required:
+        - mfa_required
+      properties:
+        access_token:
+          type: string
+          example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+        expires_in:
+          type: integer
+          example: 900
+        refresh_token:
+          type: string
+          example: a1b2c3d4e5f6...
+        session_id:
+          type: string
+          format: uuid
+          example: 987e6543-e21b-12d3-a456-426614174000
+        mfa_required:
+          type: boolean
+          example: false
+        mfa_factor_id:
+          type: string
+          format: uuid
+          example: 456e7890-e12b-34d5-a678-426614174000
+    RefreshRequest:
+      type: object
+      required:
+        - refresh_token
+      properties:
+        refresh_token:
+          type: string
+          example: a1b2c3d4e5f6...
+        device_fingerprint:
+          type: string
+          example: fp_abc123xyz
+    MFAEnrollRequest:
+      type: object
+      required:
+        - password_confirmation
+      properties:
+        label:
+          type: string
+          example: Personal Authenticator
+        password_confirmation:
+          type: string
+          format: password
+          example: SecureP@ssw0rd!2026
+    MFAEnrollResponse:
+      type: object
+      required:
+        - factor_id
+        - otpauth_uri
+        - backup_codes
+        - expires_at
+      properties:
+        factor_id:
+          type: string
+          format: uuid
+          example: 456e7890-e12b-34d5-a678-426614174000
+        otpauth_uri:
+          type: string
+          example: otpauth://totp/TopChoiceBank:customer@example.com?secret=JBSWY3DPEHPK3PXP&issuer=TopChoiceBank
+        backup_codes:
+          type: array
+          items:
+            type: string
+          example:
+            - 01234567-89abcdef-01234567-89abcdef
+        expires_at:
+          type: string
+          format: date-time
+          example: '2026-11-21T19:15:00Z'
+    MFAVerifyRequest:
+      type: object
+      required:
+        - factor_id
+        - code
+      properties:
+        factor_id:
+          type: string
+          format: uuid
+          example: 456e7890-e12b-34d5-a678-426614174000
+        code:
+          type: string
+          minLength: 6
+          maxLength: 6
+          example: '123456'
+    MFAVerifyResponse:
+      type: object
+      required:
+        - factor_id
+        - status
+        - verified_at
+      properties:
+        factor_id:
+          type: string
+          format: uuid
+          example: 456e7890-e12b-34d5-a678-426614174000
+        status:
+          type: string
+          example: ACTIVE
+        verified_at:
+          type: string
+          format: date-time
+          example: '2026-11-21T19:05:00Z'
+    PasswordChangeRequest:
+      type: object
+      required:
+        - current_password
+        - new_password
+      properties:
+        current_password:
+          type: string
+          format: password
+          example: SecureP@ssw0rd!2026
+        new_password:
+          type: string
+          format: password
+          minLength: 8
+          example: NewBrandPassword2026!
+        totp_code:
+          type: string
+          example: '654321'
+        backup_code:
+          type: string
+          example: 01234567-89abcdef-01234567-89abcdef
+    PasswordChangeResponse:
+      type: object
+      required:
+        - changed_at
+        - revoked_sessions
+      properties:
+        changed_at:
+          type: string
+          format: date-time
+          example: '2026-11-21T19:05:00Z'
+        revoked_sessions:
+          type: integer
+          example: 2
+    OAuthAuthorizeConsentRequest:
+      type: object
+      required:
+        - consent_token
+        - approved
+      properties:
+        consent_token:
+          type: string
+          example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+        approved:
+          type: boolean
+          example: true
+    OAuthAuthorizeConsentResponse:
+      type: object
+      required:
+        - client_name
+        - requested_scopes
+        - consent_token
+      properties:
+        client_name:
+          type: string
+          example: fintech-partner-app
+        requested_scopes:
+          type: array
+          items:
+            type: string
+          example:
+            - accounts:read
+            - transfers:read
+        consent_token:
+          type: string
+          example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+    OAuthTokenRequest:
+      type: object
+      required:
+        - grant_type
+        - code
+        - redirect_uri
+        - client_id
+        - code_verifier
+      properties:
+        grant_type:
+          type: string
+          enum:
+            - authorization_code
+          example: authorization_code
+        code:
+          type: string
+          example: splat_code_xyz123
+        redirect_uri:
+          type: string
+          example: https://partner.example.com/oauth/callback
+        client_id:
+          type: string
+          example: fintech-partner-app
+        code_verifier:
+          type: string
+          example: dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk-topchoicebank-pkce-verifier-test
+    OAuthTokenResponse:
+      type: object
+      required:
+        - access_token
+        - token_type
+        - expires_in
+        - scope
+      properties:
+        access_token:
+          type: string
+          example: fosite_token_abc123...
+        token_type:
+          type: string
+          example: bearer
+        expires_in:
+          type: integer
+          example: 3600
+        scope:
+          type: string
+          example: accounts:read transfers:read
+    OAuthErrorResponse:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: string
+          example: invalid_grant
+        error_description:
+          type: string
+          example: The authorization code has expired or is invalid
+    ProblemDetails:
+      type: object
+      required:
+        - title
+        - status
+        - detail
+      properties:
+        type:
+          type: string
+          example: about:blank
+        title:
+          type: string
+          example: Validation Error
+        status:
+          type: integer
+          example: 422
+        detail:
+          type: string
+          example: password must be at least 8 characters long
+        instance:
+          type: string
+          example: /v1/auth/register
+    AddressResponse:
+      type: object
+      required:
+        - line1
+        - city
+        - country_code
+      properties:
+        line1:
+          type: string
+          example: 123 Main St
+        line2:
+          type: string
+          example: Apt 4B
+        city:
+          type: string
+          example: New York
+        region:
+          type: string
+          example: NY
+        postal_code:
+          type: string
+          example: '10001'
+        country_code:
+          type: string
+          example: US
+    AddressInput:
+      type: object
+      required:
+        - line1
+        - city
+        - country_code
+      properties:
+        line1:
+          type: string
+          example: 123 Main St
+        line2:
+          type: string
+          example: Apt 4B
+        city:
+          type: string
+          example: New York
+        region:
+          type: string
+          example: NY
+        postal_code:
+          type: string
+          example: '10001'
+        country_code:
+          type: string
+          example: US
+    ProfileResponse:
+      type: object
+      required:
+        - id
+        - legal_name
+        - phone_masked
+        - address
+        - onboarding_state
+        - version
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: 123e4567-e89b-12d3-a456-426614174000
+        email_masked:
+          type: string
+          example: a***@example.com
+        legal_name:
+          type: string
+          example: Alice Smith
+        phone_masked:
+          type: string
+          example: +1*****0143
+        address:
+          $ref: '#/components/schemas/AddressResponse'
+        onboarding_state:
+          type: string
+          enum:
+            - PENDING
+            - UNDER_REVIEW
+            - APPROVED
+            - REJECTED
+          example: PENDING
+        version:
+          type: integer
+          example: 1
+    UpdateProfileRequest:
+      type: object
+      properties:
+        phone_e164:
+          type: string
+          example: '+12025550143'
+        address:
+          $ref: '#/components/schemas/AddressInput'
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Authenticated customer or administrator Bearer JWT access token
+    OAuth2:
+      type: oauth2
+      description: Constrained partner authorization flow with S256 PKCE
+      flows:
+        authorizationCode:
+          authorizationUrl: /v1/oauth/authorize
+          tokenUrl: /v1/oauth/token
+          scopes:
+            profile:read: Read customer profile information
+            accounts:read: Read bank account balances and details
+            accounts:write: Modify bank account settings
+            transfers:read: View fund transfer history
+            transfers:write: Initiate new fund transfers
+            cards:read: View debit/credit card details
+            cards:write: Manage card controls and limits
