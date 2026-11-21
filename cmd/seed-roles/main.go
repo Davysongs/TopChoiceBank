@@ -115,7 +115,8 @@ func ensureDefaultCustomerRoles(ctx context.Context, db *sql.DB) (int64, error) 
 		WHERE r.name = 'customer'
 		  AND NOT EXISTS (
 			  SELECT 1 FROM identity.user_roles ur
-			  WHERE ur.user_id = u.id AND ur.revoked_at IS NULL
+			  JOIN identity.roles r2 ON ur.role_id = r2.id
+			  WHERE ur.user_id = u.id AND r2.name = 'customer' AND ur.revoked_at IS NULL
 		  )
 		ON CONFLICT (user_id, role_id) DO UPDATE SET revoked_at = NULL
 	`

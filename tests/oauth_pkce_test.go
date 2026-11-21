@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -32,7 +33,7 @@ func generateTestPKCE() (string, string) {
 }
 
 // setupOAuthTestServer creates a test server with both identity auth and OAuth endpoints registered.
-func setupOAuthTestServer(t *testing.T) (*httptest.Server, *oauth.OAuthAdapter, *identity.Service) {
+func setupOAuthTestServer(t *testing.T) (*httptest.Server, *oauth.OAuthAdapter, *identity.Service, *sql.DB) {
 	t.Helper()
 
 	server, db := setupTestServer(t)
@@ -68,14 +69,15 @@ func setupOAuthTestServer(t *testing.T) (*httptest.Server, *oauth.OAuthAdapter, 
 	}))))
 
 	oauthServer := httptest.NewServer(router.Handler())
-	return oauthServer, adapter, svc
+	return oauthServer, adapter, svc, db
 }
 
 // TestOAuth2_S256PKCE_CodeExchangeAndReplayPrevention tests the complete PKCE code flow,
 // exact redirect matching, and single-use authorization code enforcement.
 func TestOAuth2_S256PKCE_CodeExchangeAndReplayPrevention(t *testing.T) {
-	server, adapter, _ := setupOAuthTestServer(t)
+	server, adapter, _, db := setupOAuthTestServer(t)
 	defer server.Close()
+	defer db.Close()
 
 	// 1. Register a public partner client in PostgreSQL
 	clientID := "fintech-partner-app"
@@ -264,8 +266,9 @@ func TestOAuth2_S256PKCE_CodeExchangeAndReplayPrevention(t *testing.T) {
 // TestOAuth2_SecurityRejections verifies PKCE method enforcement, exact redirect URI matching,
 // and invalid verifier rejection.
 func TestOAuth2_SecurityRejections(t *testing.T) {
-	server, adapter, _ := setupOAuthTestServer(t)
+	server, adapter, _, db := setupOAuthTestServer(t)
 	defer server.Close()
+	defer db.Close()
 
 	clientID := "security-test-client"
 	validRedirectURI := "https://partner.example.com/oauth/callback"
@@ -322,6 +325,27 @@ func TestOAuth2_SecurityRejections(t *testing.T) {
 	defer respMismatch.Body.Close()
 	if respMismatch.StatusCode != http.StatusBadRequest {
 		t.Fatalf("expected 400 Bad Request for mismatched redirect_uri, got %d", respMismatch.StatusCode)
+	}
+
+	// 2b. Custom non-http(s) scheme rejected even if host is localhost
+	customSchemeParams := url.Values{
+		"client_id":             {clientID},
+		"redirect_uri":          {"evilapp://localhost/callback"},
+		"response_type":         {"code"},
+		"scope":                 {"accounts:read"},
+		"state":                 {"random-state-12345"},
+		"code_challenge":        {challenge},
+		"code_challenge_method": {"S256"},
+	}
+	reqCustom, _ := http.NewRequest(http.MethodGet, server.URL+"/v1/oauth/authorize?"+customSchemeParams.Encode(), nil)
+	reqCustom.Header.Set("Authorization", "Bearer "+userToken)
+	respCustom, err := http.DefaultClient.Do(reqCustom)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer respCustom.Body.Close()
+	if respCustom.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected 400 Bad Request for custom scheme redirect_uri, got %d", respCustom.StatusCode)
 	}
 
 	// 3. Unknown client rejected
@@ -450,5 +474,33 @@ func TestOAuth2_SecurityRejections(t *testing.T) {
 		var buf bytes.Buffer
 		_, _ = buf.ReadFrom(respGoodVerifier.Body)
 		t.Fatalf("expected 200 OK for valid code_verifier, got %d: %s", respGoodVerifier.StatusCode, buf.String())
+	}
+
+	// 6. Multi-instance exchange: code issued by adapter A exchanged by adapter B sharing PostgreSQL with empty in-memory state
+	adapterB := oauth.NewOAuthAdapter(db, "integration-test-jwt-secret-key-32bytes")
+	routerB := platformhttp.NewRouter()
+	platformhttp.RegisterOAuthRoutes(routerB, adapterB, "integration-test-jwt-secret-key-32bytes")
+	serverB := httptest.NewServer(routerB.Handler())
+	defer serverB.Close()
+
+	codeForB := getAuthCodeViaConsent(autoApproveParams)
+
+	exchangeOnBParams := url.Values{
+		"grant_type":    {"authorization_code"},
+		"code":          {codeForB},
+		"redirect_uri":  {validRedirectURI},
+		"client_id":     {clientID},
+		"code_verifier": {verifier},
+	}
+	respB, err := http.PostForm(serverB.URL+"/v1/oauth/token", exchangeOnBParams)
+	if err != nil {
+		t.Fatalf("exchange on instance B failed: %v", err)
+	}
+	defer respB.Body.Close()
+
+	if respB.StatusCode != http.StatusOK {
+		var buf bytes.Buffer
+		_, _ = buf.ReadFrom(respB.Body)
+		t.Fatalf("expected 200 OK exchanging code on instance B with empty cache, got %d: %s", respB.StatusCode, buf.String())
 	}
 }

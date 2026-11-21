@@ -54,6 +54,7 @@ func NewOAuthAdapter(db *sql.DB, secret string) *OAuthAdapter {
 		EnablePKCEPlainChallengeMethod: false, // strictly enforce S256 PKCE
 		AuthorizeCodeLifespan:          10 * time.Minute,
 		AccessTokenLifespan:            1 * time.Hour,
+		SanitationWhiteList:            []string{"code", "redirect_uri", "code_challenge", "code_challenge_method"},
 		RedirectSecureChecker: func(ctx context.Context, u *url.URL) bool {
 			if u == nil {
 				return false
@@ -61,8 +62,11 @@ func NewOAuthAdapter(db *sql.DB, secret string) *OAuthAdapter {
 			if strings.EqualFold(u.Scheme, "https") {
 				return true
 			}
-			host := u.Hostname()
-			return host == "localhost" || host == "127.0.0.1" || host == "::1"
+			if strings.EqualFold(u.Scheme, "http") {
+				host := u.Hostname()
+				return host == "localhost" || host == "127.0.0.1" || host == "::1"
+			}
+			return false
 		},
 	}
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"net/url"
@@ -160,6 +161,12 @@ func (s *PostgresOAuthStore) GetClient(ctx context.Context, id string) (fosite.C
 
 // CreateAuthorizeCodeSession stores the authorization code session in memory and PostgreSQL.
 func (s *PostgresOAuthStore) CreateAuthorizeCodeSession(ctx context.Context, code string, req fosite.Requester) error {
+	pkceChallenge := req.GetRequestForm().Get("code_challenge")
+	pkceMethod := req.GetRequestForm().Get("code_challenge_method")
+	if pkceMethod == "" {
+		pkceMethod = "S256"
+	}
+
 	if err := s.MemoryStore.CreateAuthorizeCodeSession(ctx, code, req); err != nil {
 		return err
 	}
@@ -183,12 +190,6 @@ func (s *PostgresOAuthStore) CreateAuthorizeCodeSession(ctx context.Context, cod
 	}
 
 	redirectURI := req.GetRequestForm().Get("redirect_uri")
-
-	pkceChallenge := req.GetRequestForm().Get("code_challenge")
-	pkceMethod := req.GetRequestForm().Get("code_challenge_method")
-	if pkceMethod == "" {
-		pkceMethod = "S256"
-	}
 
 	scopes := make([]string, 0)
 	for _, sc := range req.GetGrantedScopes() {
@@ -262,6 +263,7 @@ func (s *PostgresOAuthStore) GetAuthorizeCodeSession(ctx context.Context, code s
 			client, _ := s.GetClient(ctx, clientID)
 			sess := setSessionSubject(session, userID)
 			reconstructed := &fosite.Request{
+				ID:             hex.EncodeToString(codeHash[:]),
 				Client:         client,
 				RequestedScope: fosite.Arguments(scopes),
 				GrantedScope:   fosite.Arguments(scopes),
@@ -292,6 +294,7 @@ func (s *PostgresOAuthStore) GetAuthorizeCodeSession(ctx context.Context, code s
 		}
 		sess := setSessionSubject(session, userID)
 		reconstructed := &fosite.Request{
+			ID:             hex.EncodeToString(codeHash[:]),
 			Client:         client,
 			RequestedScope: fosite.Arguments(scopes),
 			GrantedScope:   fosite.Arguments(scopes),
@@ -307,6 +310,34 @@ func (s *PostgresOAuthStore) GetAuthorizeCodeSession(ctx context.Context, code s
 	}
 
 	return s.MemoryStore.GetAuthorizeCodeSession(ctx, code, session)
+}
+
+// CreatePKCERequestSession stores the PKCE requester session in memory and PostgreSQL.
+func (s *PostgresOAuthStore) CreatePKCERequestSession(ctx context.Context, signature string, req fosite.Requester) error {
+	if err := s.MemoryStore.CreatePKCERequestSession(ctx, signature, req); err != nil {
+		return err
+	}
+
+	if s.db != nil {
+		codeHash := sha256.Sum256([]byte(signature))
+		challenge := req.GetRequestForm().Get("code_challenge")
+		method := req.GetRequestForm().Get("code_challenge_method")
+		if method == "" {
+			method = "S256"
+		}
+		if challenge != "" {
+			_, err := s.db.ExecContext(ctx, `
+				UPDATE identity.oauth_authorization_codes
+				SET pkce_challenge = $2, pkce_method = $3
+				WHERE code_hash = $1
+			`, codeHash[:], challenge, method)
+			if err != nil {
+				return fmt.Errorf("failed to persist pkce parameters to postgres: %w", err)
+			}
+		}
+	}
+
+	return nil
 }
 
 // GetPKCERequestSession retrieves the PKCE requester session from memory or PostgreSQL.
@@ -346,6 +377,7 @@ func (s *PostgresOAuthStore) GetPKCERequestSession(ctx context.Context, signatur
 			}
 			sess := setSessionSubject(session, userID)
 			reconstructed := &fosite.Request{
+				ID:             hex.EncodeToString(codeHash[:]),
 				Client:         client,
 				RequestedScope: fosite.Arguments(scopes),
 				GrantedScope:   fosite.Arguments(scopes),
@@ -386,5 +418,9 @@ func (s *PostgresOAuthStore) InvalidateAuthorizeCodeSession(ctx context.Context,
 		}
 	}
 
-	return s.MemoryStore.InvalidateAuthorizeCodeSession(ctx, code)
+	memErr := s.MemoryStore.InvalidateAuthorizeCodeSession(ctx, code)
+	if memErr != nil && !errors.Is(memErr, fosite.ErrNotFound) {
+		return memErr
+	}
+	return nil
 }
