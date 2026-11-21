@@ -48,4 +48,14 @@ func TestAESGCMTransitEncryptor_Roundtrip(t *testing.T) {
 	if err != ErrTransitDecryptionFailed {
 		t.Errorf("expected ErrTransitDecryptionFailed, got %v", err)
 	}
+
+	// Test identical key re-registration succeeds
+	if err := enc.AddKeyVersion(1, "my-test-transit-secret-key"); err != nil {
+		t.Errorf("expected identical key registration to succeed, got %v", err)
+	}
+
+	// Test conflicting key registration fails
+	if err := enc.AddKeyVersion(1, "different-conflicting-secret"); err == nil {
+		t.Error("expected conflicting key registration to fail, got nil")
+	}
 }

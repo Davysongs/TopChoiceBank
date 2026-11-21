@@ -1,6 +1,7 @@
 package security
 
 import (
+	"bytes"
 	"context"
 	"crypto/aes"
 	"crypto/cipher"
@@ -9,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"sync"
 )
 
 var (
@@ -24,6 +26,7 @@ type TransitEncryptor interface {
 
 // AESGCMTransitEncryptor implements TransitEncryptor using authenticated AES-256-GCM with key versioning.
 type AESGCMTransitEncryptor struct {
+	mu             sync.RWMutex
 	keys           map[int][]byte
 	currentVersion int
 }
@@ -59,13 +62,29 @@ func (t *AESGCMTransitEncryptor) AddKeyVersion(keyVersion int, secret string) er
 	h := sha256.Sum256([]byte(secret))
 	key := make([]byte, 32)
 	copy(key, h[:])
+
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	existing, ok := t.keys[keyVersion]
+	if ok {
+		if !bytes.Equal(existing, key) {
+			return fmt.Errorf("key version %d already registered with different secret", keyVersion)
+		}
+		return nil
+	}
+
 	t.keys[keyVersion] = key
 	return nil
 }
 
 // Encrypt encrypts plaintext using AES-256-GCM and prepends the random 12-byte nonce.
 func (t *AESGCMTransitEncryptor) Encrypt(ctx context.Context, plaintext []byte) ([]byte, int, error) {
+	t.mu.RLock()
 	key, ok := t.keys[t.currentVersion]
+	version := t.currentVersion
+	t.mu.RUnlock()
+
 	if !ok {
 		return nil, 0, ErrInvalidKeyVersion
 	}
@@ -86,12 +105,15 @@ func (t *AESGCMTransitEncryptor) Encrypt(ctx context.Context, plaintext []byte) 
 	}
 
 	ciphertext := gcm.Seal(nonce, nonce, plaintext, nil)
-	return ciphertext, t.currentVersion, nil
+	return ciphertext, version, nil
 }
 
 // Decrypt decrypts an authenticated ciphertext using the corresponding key version.
 func (t *AESGCMTransitEncryptor) Decrypt(ctx context.Context, ciphertext []byte, keyVersion int) ([]byte, error) {
+	t.mu.RLock()
 	key, ok := t.keys[keyVersion]
+	t.mu.RUnlock()
+
 	if !ok {
 		return nil, ErrInvalidKeyVersion
 	}
