@@ -160,15 +160,16 @@ func handleRefresh(service *identity.Service) http.HandlerFunc {
 
 // authenticateBearer validates the Authorization: Bearer <token> header and returns verified JWT claims.
 func authenticateBearer(w http.ResponseWriter, r *http.Request, jwtSecret string) (*security.JWTClaims, bool) {
-	authHeader := r.Header.Get("Authorization")
-	if strings.TrimSpace(authHeader) == "" || !strings.HasPrefix(authHeader, "Bearer ") {
+	tokenStr, ok := ParseBearerToken(r.Header.Get("Authorization"))
+	if !ok {
+		w.Header().Set("WWW-Authenticate", "Bearer")
 		writeProblem(w, http.StatusUnauthorized, "Unauthorized", "Bearer access token is required", r.URL.Path)
 		return nil, false
 	}
 
-	tokenStr := strings.TrimPrefix(authHeader, "Bearer ")
 	claims, err := security.VerifyAccessToken(jwtSecret, tokenStr, time.Now().UTC())
 	if err != nil {
+		w.Header().Set("WWW-Authenticate", "Bearer")
 		writeProblem(w, http.StatusUnauthorized, "Unauthorized", "Invalid or expired access token", r.URL.Path)
 		return nil, false
 	}
@@ -372,7 +373,7 @@ func handlePasswordChange(service *identity.Service) http.HandlerFunc {
 				return
 			}
 			if errors.Is(err, identity.ErrWeakPassword) {
-				writeProblem(w, http.StatusUnprocessableEntity, "Weak Password", "New password does not satisfy complexity requirements", r.URL.Path)
+				writeProblem(w, http.StatusUnprocessableEntity, "Weak Password", "New password must be at least 8 characters long", r.URL.Path)
 				return
 			}
 			if strings.Contains(err.Error(), "must be different") {

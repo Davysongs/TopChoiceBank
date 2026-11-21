@@ -84,7 +84,7 @@ func GenerateAccessTokenWithClaims(secret string, claims JWTClaims) (string, err
 	return fmt.Sprintf("%s.%s", unsignedToken, signature), nil
 }
 
-// VerifyAccessToken validates an access token's signature, claims, and expiration.
+// VerifyAccessToken validates an access token's signature, algorithm, claims, and expiration.
 func VerifyAccessToken(secret string, tokenStr string, now time.Time) (*JWTClaims, error) {
 	if secret == "" {
 		return nil, errors.New("jwt secret is required")
@@ -92,6 +92,19 @@ func VerifyAccessToken(secret string, tokenStr string, now time.Time) (*JWTClaim
 
 	parts := strings.Split(tokenStr, ".")
 	if len(parts) != 3 {
+		return nil, ErrInvalidToken
+	}
+
+	headerBytes, err := base64.RawURLEncoding.DecodeString(parts[0])
+	if err != nil {
+		return nil, ErrInvalidToken
+	}
+
+	var header struct {
+		Alg string `json:"alg"`
+		Typ string `json:"typ"`
+	}
+	if err := json.Unmarshal(headerBytes, &header); err != nil || header.Alg != "HS256" {
 		return nil, ErrInvalidToken
 	}
 
@@ -114,8 +127,16 @@ func VerifyAccessToken(secret string, tokenStr string, now time.Time) (*JWTClaim
 		return nil, ErrInvalidToken
 	}
 
-	if now.Unix() >= claims.ExpiresAt {
+	if strings.TrimSpace(claims.Subject) == "" {
+		return nil, ErrInvalidToken
+	}
+
+	if claims.ExpiresAt <= 0 || now.Unix() >= claims.ExpiresAt {
 		return nil, ErrExpiredToken
+	}
+
+	if claims.Issuer != "" && claims.Issuer != "topchoicebank" {
+		return nil, ErrInvalidToken
 	}
 
 	return &claims, nil

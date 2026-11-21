@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Davysongs/TopChoiceBank/internal/identity/domain"
@@ -14,6 +15,39 @@ type claimsContextKeyType string
 
 // ClaimsContextKey is the context key under which authenticated JWT claims are stored.
 const ClaimsContextKey claimsContextKeyType = "jwt_claims"
+
+// TokenVerifierFunc defines an extensible token verification hook (e.g. for OAuth 2.0 access tokens).
+type TokenVerifierFunc func(ctx context.Context, tokenStr string) (*security.JWTClaims, error)
+
+var (
+	oauthTokenVerifier   TokenVerifierFunc
+	oauthTokenVerifierMu sync.RWMutex
+)
+
+// RegisterOAuthTokenVerifier registers an optional verifier for partner OAuth 2.0 access tokens.
+func RegisterOAuthTokenVerifier(verifier TokenVerifierFunc) {
+	oauthTokenVerifierMu.Lock()
+	defer oauthTokenVerifierMu.Unlock()
+	oauthTokenVerifier = verifier
+}
+
+// ParseBearerToken extracts the bearer token from the Authorization header case-insensitively.
+// It returns (token, true) if a valid Bearer scheme and non-empty token are found, or ("", false) otherwise.
+func ParseBearerToken(authHeader string) (string, bool) {
+	trimmed := strings.TrimSpace(authHeader)
+	if trimmed == "" {
+		return "", false
+	}
+	parts := strings.SplitN(trimmed, " ", 2)
+	if len(parts) != 2 || !strings.EqualFold(parts[0], "bearer") {
+		return "", false
+	}
+	token := strings.TrimSpace(parts[1])
+	if token == "" {
+		return "", false
+	}
+	return token, true
+}
 
 // ContextWithClaims injects the authenticated JWT claims into the request context.
 func ContextWithClaims(ctx context.Context, claims *security.JWTClaims) context.Context {
@@ -34,17 +68,32 @@ func ClaimsFromContext(ctx context.Context) (*security.JWTClaims, bool) {
 func RequireAuth(jwtSecret string) Middleware {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			authHeader := r.Header.Get("Authorization")
-			if strings.TrimSpace(authHeader) == "" || !strings.HasPrefix(authHeader, "Bearer ") {
+			tokenStr, ok := ParseBearerToken(r.Header.Get("Authorization"))
+			if !ok {
+				w.Header().Set("WWW-Authenticate", "Bearer")
 				writeProblem(w, http.StatusUnauthorized, "Unauthorized", "Bearer access token is required", r.URL.Path)
 				return
 			}
 
-			tokenStr := strings.TrimPrefix(authHeader, "Bearer ")
 			claims, err := security.VerifyAccessToken(jwtSecret, tokenStr, time.Now().UTC())
 			if err != nil {
-				writeProblem(w, http.StatusUnauthorized, "Unauthorized", "Invalid or expired access token", r.URL.Path)
-				return
+				// Try registered OAuth token verifier if configured
+				oauthTokenVerifierMu.RLock()
+				verifier := oauthTokenVerifier
+				oauthTokenVerifierMu.RUnlock()
+
+				var oauthClaims *security.JWTClaims
+				if verifier != nil {
+					oauthClaims, _ = verifier(r.Context(), tokenStr)
+				}
+
+				if oauthClaims != nil {
+					claims = oauthClaims
+				} else {
+					w.Header().Set("WWW-Authenticate", "Bearer")
+					writeProblem(w, http.StatusUnauthorized, "Unauthorized", "Invalid or expired access token", r.URL.Path)
+					return
+				}
 			}
 
 			ctx := ContextWithClaims(r.Context(), claims)
@@ -59,6 +108,7 @@ func RequireRoles(allowedRoles ...string) Middleware {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			claims, ok := ClaimsFromContext(r.Context())
 			if !ok || claims == nil {
+				w.Header().Set("WWW-Authenticate", "Bearer")
 				writeProblem(w, http.StatusUnauthorized, "Unauthorized", "Authentication required", r.URL.Path)
 				return
 			}
@@ -79,6 +129,7 @@ func RequireScopes(requiredScopes ...string) Middleware {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			claims, ok := ClaimsFromContext(r.Context())
 			if !ok || claims == nil {
+				w.Header().Set("WWW-Authenticate", "Bearer")
 				writeProblem(w, http.StatusUnauthorized, "Unauthorized", "Authentication required", r.URL.Path)
 				return
 			}
@@ -102,6 +153,7 @@ func RequireRecentMFA(maxAge time.Duration) Middleware {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			claims, ok := ClaimsFromContext(r.Context())
 			if !ok || claims == nil {
+				w.Header().Set("WWW-Authenticate", "Bearer")
 				writeProblem(w, http.StatusUnauthorized, "Unauthorized", "Authentication required", r.URL.Path)
 				return
 			}
