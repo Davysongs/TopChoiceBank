@@ -3,6 +3,7 @@ package domain
 import (
 	"crypto/rand"
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/base32"
 	"errors"
 	"fmt"
@@ -238,7 +239,7 @@ func GenerateBackupCodes(count int) ([]string, [][]byte, error) {
 	return plainCodes, hashes, nil
 }
 
-// HashBackupCode normalizes a backup code by removing whitespace and hyphens and returns its SHA-256 digest.
+// HashBackupCode normalizes a backup code by trimming leading and trailing whitespace and returns its SHA-256 digest.
 func HashBackupCode(code string) []byte {
 	clean := strings.ToLower(strings.ReplaceAll(strings.TrimSpace(code), "-", ""))
 	h := sha256.Sum256([]byte(clean))
@@ -247,21 +248,24 @@ func HashBackupCode(code string) []byte {
 	return res
 }
 
-// VerifyTOTPCode verifies a 6-digit TOTP code against a decrypted base32 secret with standard clock drift tolerance.
+// VerifyTOTPCode verifies a 6-digit TOTP code against a decrypted base32 secret with standard clock drift tolerance using constant-time comparison.
 func VerifyTOTPCode(secret string, code string, now time.Time) (bool, error) {
 	cleanCode := strings.TrimSpace(code)
 	if len(cleanCode) != 6 {
 		return false, nil
 	}
 
-	valid, err := totp.ValidateCustom(cleanCode, secret, now, totp.ValidateOpts{
-		Period:    30,
-		Skew:      1, // +/- 1 period (30s) tolerance
-		Digits:    otp.DigitsSix,
-		Algorithm: otp.AlgorithmSHA1,
-	})
-	if err != nil {
-		return false, err
+	currentStep := now.Unix() / 30
+	var matched bool
+	for step := currentStep - 1; step <= currentStep+1; step++ {
+		expectedCode, err := totp.GenerateCodeCustom(secret, time.Unix(step*30, 0), totp.ValidateOpts{
+			Period:    30,
+			Digits:    otp.DigitsSix,
+			Algorithm: otp.AlgorithmSHA1,
+		})
+		if err == nil && subtle.ConstantTimeCompare([]byte(expectedCode), []byte(cleanCode)) == 1 {
+			matched = true
+		}
 	}
-	return valid, nil
+	return matched, nil
 }

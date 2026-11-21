@@ -3,6 +3,7 @@ package identity
 import (
 	"context"
 	"crypto/rand"
+	"crypto/subtle"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -297,7 +298,7 @@ func (s *Service) Login(ctx context.Context, req LoginRequest) (*LoginResponse, 
 					Digits:    otp.DigitsSix,
 					Algorithm: otp.AlgorithmSHA1,
 				})
-				if err == nil && expectedCode == cleanCode {
+				if err == nil && subtle.ConstantTimeCompare([]byte(expectedCode), []byte(cleanCode)) == 1 {
 					validStep = step
 					break
 				}
@@ -763,9 +764,30 @@ func (s *Service) ChangePassword(ctx context.Context, req ChangePasswordRequest)
 		return nil, domain.ErrMissingUserID
 	}
 
+	now := time.Now().UTC()
 	user, err := s.repo.GetUserByID(ctx, req.UserID)
 	if err != nil {
 		return nil, err
+	}
+
+	if user.Status == domain.UserStatusLocked && !user.IsLocked(now) {
+		if user.PreLockoutStatus != "" {
+			user.Status = user.PreLockoutStatus
+		} else {
+			user.Status = domain.UserStatusActive
+		}
+		user.PreLockoutStatus = ""
+		user.LockedUntil = nil
+	}
+
+	if user.Status == domain.UserStatusDisabled {
+		_ = s.repo.RecordSecurityEvent(ctx, user.ID, "identity.password_change_failed.v1", "BLOCKED", req.RequestID, req.RequestIP, map[string]any{"reason": "disabled"})
+		return nil, ErrAccountDisabled
+	}
+
+	if user.IsLocked(now) {
+		_ = s.repo.RecordSecurityEvent(ctx, user.ID, "identity.password_change_failed.v1", "BLOCKED", req.RequestID, req.RequestIP, map[string]any{"reason": "locked"})
+		return nil, ErrAccountLocked
 	}
 
 	oldPwd := req.CurrentPassword
@@ -774,7 +796,13 @@ func (s *Service) ChangePassword(ctx context.Context, req ChangePasswordRequest)
 	}
 
 	if !s.hasher.Verify(oldPwd, user.PasswordHash) {
-		_ = s.repo.RecordSecurityEvent(ctx, req.UserID, "identity.password_change_failed.v1", "FAILURE", req.RequestID, req.RequestIP, map[string]any{"reason": "invalid_old_password"})
+		user.RecordFailedLogin(now, lockoutWindow, lockoutDuration, maxAttempts)
+		_ = s.repo.UpdateUserStatusAndLockout(ctx, user)
+		_ = s.repo.RecordSecurityEvent(ctx, req.UserID, "identity.password_change_failed.v1", "FAILURE", req.RequestID, req.RequestIP, map[string]any{"reason": "invalid_old_password", "failed_count": user.FailedLoginCount})
+		if user.Status == domain.UserStatusLocked {
+			_ = s.repo.RecordSecurityEvent(ctx, user.ID, "identity.account_locked.v1", "BLOCKED", req.RequestID, req.RequestIP, map[string]any{"locked_until": user.LockedUntil})
+			return nil, ErrAccountLocked
+		}
 		return nil, ErrInvalidCredentials
 	}
 
@@ -783,7 +811,6 @@ func (s *Service) ChangePassword(ctx context.Context, req ChangePasswordRequest)
 		return nil, err
 	}
 
-	now := time.Now().UTC()
 	var backupHash []byte
 	if activeFactor != nil {
 		if req.RecentMFA {
@@ -793,8 +820,16 @@ func (s *Service) ChangePassword(ctx context.Context, req ChangePasswordRequest)
 			if err != nil {
 				return nil, err
 			}
+
 			valid, err := domain.VerifyTOTPCode(string(secretBytes), req.TOTPCode, now)
 			if err != nil || !valid {
+				user.RecordFailedLogin(now, lockoutWindow, lockoutDuration, maxAttempts)
+				_ = s.repo.UpdateUserStatusAndLockout(ctx, user)
+				_ = s.repo.RecordSecurityEvent(ctx, req.UserID, "identity.password_change_failed.v1", "FAILURE", req.RequestID, req.RequestIP, map[string]any{"reason": "invalid_totp", "failed_count": user.FailedLoginCount})
+				if user.Status == domain.UserStatusLocked {
+					_ = s.repo.RecordSecurityEvent(ctx, user.ID, "identity.account_locked.v1", "BLOCKED", req.RequestID, req.RequestIP, map[string]any{"locked_until": user.LockedUntil})
+					return nil, ErrAccountLocked
+				}
 				return nil, domain.ErrInvalidTOTPCode
 			}
 		} else if strings.TrimSpace(req.BackupCode) != "" {
@@ -829,8 +864,21 @@ func (s *Service) ChangePassword(ctx context.Context, req ChangePasswordRequest)
 
 	revokedCount, err := s.repo.RotatePasswordTx(ctx, user.ID, user.Version, newHash, backupHash, outboxEvent)
 	if err != nil {
+		if errors.Is(err, domain.ErrInvalidBackupCode) {
+			user.RecordFailedLogin(now, lockoutWindow, lockoutDuration, maxAttempts)
+			_ = s.repo.UpdateUserStatusAndLockout(ctx, user)
+			_ = s.repo.RecordSecurityEvent(ctx, req.UserID, "identity.password_change_failed.v1", "FAILURE", req.RequestID, req.RequestIP, map[string]any{"reason": "invalid_backup_code", "failed_count": user.FailedLoginCount})
+			if user.Status == domain.UserStatusLocked {
+				_ = s.repo.RecordSecurityEvent(ctx, user.ID, "identity.account_locked.v1", "BLOCKED", req.RequestID, req.RequestIP, map[string]any{"locked_until": user.LockedUntil})
+				return nil, ErrAccountLocked
+			}
+			return nil, domain.ErrInvalidBackupCode
+		}
 		return nil, err
 	}
+
+	user.RecordSuccessfulLogin(now)
+	_ = s.repo.UpdateUserStatusAndLockout(ctx, user)
 
 	_ = s.repo.RecordSecurityEvent(ctx, req.UserID, "identity.password_changed.v1", "SUCCESS", req.RequestID, req.RequestIP, nil)
 
