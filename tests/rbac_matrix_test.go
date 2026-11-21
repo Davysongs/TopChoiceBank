@@ -156,6 +156,33 @@ func TestRBACMatrixAcrossAllFourRoles(t *testing.T) {
 		}
 		resp.Body.Close()
 	}
+
+	// Verify allowed role lacking required scope returns 403 Forbidden
+	noWriteScopeToken, err := security.GenerateAccessTokenWithClaims(jwtSecret, security.JWTClaims{
+		Subject:   userA,
+		JTI:       uuid.New().String(),
+		Issuer:    "topchoicebank",
+		IssuedAt:  now.Unix(),
+		ExpiresAt: now.Add(1 * time.Hour).Unix(),
+		Roles:     []string{domain.RoleCustomer},
+		Scopes:    []string{domain.ScopeProfileRead},
+		AMR:       []string{"pwd"},
+		AuthTime:  now.Unix(),
+	})
+	if err != nil {
+		t.Fatalf("failed to generate no-write token: %v", err)
+	}
+
+	reqScopeDenied, _ := http.NewRequest(http.MethodGet, server.URL+"/v1/profile/edit", nil)
+	reqScopeDenied.Header.Set("Authorization", "Bearer "+noWriteScopeToken)
+	respScopeDenied, err := http.DefaultClient.Do(reqScopeDenied)
+	if err != nil {
+		t.Fatalf("failed request: %v", err)
+	}
+	defer respScopeDenied.Body.Close()
+	if respScopeDenied.StatusCode != http.StatusForbidden {
+		t.Errorf("expected 403 Forbidden for allowed role with missing scope, got %d", respScopeDenied.StatusCode)
+	}
 }
 
 // TestRecentMFAMiddlewareEnforcement tests gating behind recent MFA verification and rejection on expired or missing MFA claims.

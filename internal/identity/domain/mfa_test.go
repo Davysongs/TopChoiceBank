@@ -95,6 +95,26 @@ func TestTOTP_GenerationAndVerification(t *testing.T) {
 	if invalidMalformed {
 		t.Errorf("expected 3-digit code to be invalid")
 	}
+
+	// Deterministic fixture for out-of-window TOTP verification
+	deterministicSecret := "JBSWY3DPEHPK3PXP" // standard RFC base32 secret
+	fixedTime := time.Unix(1700000000, 0).UTC()
+	fixedCode, err := totp.GenerateCodeCustom(deterministicSecret, fixedTime, totp.ValidateOpts{
+		Period:    30,
+		Digits:    otp.DigitsSix,
+		Algorithm: otp.AlgorithmSHA1,
+	})
+	if err != nil {
+		t.Fatalf("failed to generate fixed code: %v", err)
+	}
+	validFixed, _ := VerifyTOTPCode(deterministicSecret, fixedCode, fixedTime)
+	if !validFixed {
+		t.Fatalf("expected deterministic code to be valid at fixture time")
+	}
+	invalidFixedFar, _ := VerifyTOTPCode(deterministicSecret, fixedCode, fixedTime.Add(10*time.Minute))
+	if invalidFixedFar {
+		t.Fatalf("expected deterministic code to be invalid far out of window")
+	}
 }
 
 // TestBackupCodes_GenerationAndHashing verifies backup code formatting and deterministic hashing.
@@ -110,7 +130,7 @@ func TestBackupCodes_GenerationAndHashing(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		code := plainCodes[i]
 		if len(code) != 35 || code[8] != '-' || code[17] != '-' || code[26] != '-' {
-			t.Errorf("unexpected backup code format: %s", code)
+			t.Fatalf("unexpected backup code format: %s", code)
 		}
 		expectedHash := HashBackupCode(code)
 		if string(expectedHash) != string(hashes[i]) {

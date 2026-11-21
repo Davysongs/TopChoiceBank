@@ -32,6 +32,13 @@ func extractSecretFromOTPAuthURI(uriStr string) (string, error) {
 // registerAndLoginHelper registers a fresh user, logs in, and returns the user ID, email, password, and access token.
 func registerAndLoginHelper(t *testing.T, serverURL string) (string, string, string, string) {
 	t.Helper()
+	uID, email, pwd, access, _ := registerAndLoginWithRefreshHelper(t, serverURL)
+	return uID, email, pwd, access
+}
+
+// registerAndLoginWithRefreshHelper registers a fresh user, logs in, and returns credentials including refresh token.
+func registerAndLoginWithRefreshHelper(t *testing.T, serverURL string) (string, string, string, string, string) {
+	t.Helper()
 
 	email := fmt.Sprintf("mfa_user_%d@example.com", time.Now().UnixNano())
 	password := "SecureP@ss12345!"
@@ -77,7 +84,7 @@ func registerAndLoginHelper(t *testing.T, serverURL string) (string, string, str
 		t.Fatalf("failed to decode login response: %v", err)
 	}
 
-	return regData.UserID, email, password, loginData.AccessToken
+	return regData.UserID, email, password, loginData.AccessToken, loginData.RefreshToken
 }
 
 // TestMFAEnrollmentVerificationAndSingleActiveInvariant verifies TOTP enrollment, verification,
@@ -343,6 +350,9 @@ func TestMFALoginAndBackupCodeConsumption(t *testing.T) {
 	if !challengeData.MFARequired || challengeData.MFAFactorID == "" {
 		t.Fatalf("expected mfa_required=true and non-empty mfa_factor_id, got %+v", challengeData)
 	}
+	if challengeData.AccessToken != "" || challengeData.RefreshToken != "" {
+		t.Fatalf("expected empty access_token and refresh_token during challenge, got accessToken=%q, refreshToken=%q", challengeData.AccessToken, challengeData.RefreshToken)
+	}
 
 	// 2. Login with valid TOTP code succeeds and issues tokens with amr: ["pwd", "mfa"]
 	totpCode, _ := totp.GenerateCode(secret, time.Now().UTC())
@@ -414,7 +424,7 @@ func TestPasswordChangeRequiresMFAAndRevokesSessions(t *testing.T) {
 	defer server.Close()
 	defer db.Close()
 
-	userID, email, oldPassword, token := registerAndLoginHelper(t, server.URL)
+	userID, email, oldPassword, token, oldRefreshToken := registerAndLoginWithRefreshHelper(t, server.URL)
 
 	// Enroll and activate MFA
 	enrollBody, _ := json.Marshal(map[string]string{
@@ -516,6 +526,19 @@ func TestPasswordChangeRequiresMFAAndRevokesSessions(t *testing.T) {
 	}
 	if outboxCount != 1 {
 		t.Fatalf("expected 1 password_changed outbox event, got %d", outboxCount)
+	}
+
+	// 3b. Verify refresh token issued prior to password change is revoked
+	refreshOldBody, _ := json.Marshal(map[string]string{
+		"refresh_token": oldRefreshToken,
+	})
+	respOldRefresh, err := http.Post(server.URL+"/v1/auth/refresh", "application/json", bytes.NewBuffer(refreshOldBody))
+	if err != nil {
+		t.Fatalf("old refresh request failed: %v", err)
+	}
+	defer respOldRefresh.Body.Close()
+	if respOldRefresh.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("expected 401 Unauthorized for pre-change refresh token, got %d", respOldRefresh.StatusCode)
 	}
 
 	// 4. Verify old password cannot be used to login
