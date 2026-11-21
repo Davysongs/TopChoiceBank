@@ -17,6 +17,7 @@ import (
 	"github.com/ory/fosite/storage"
 )
 
+// setSessionSubject sets the user subject on the provided fosite session if supported.
 func setSessionSubject(session fosite.Session, userID string) fosite.Session {
 	if session == nil {
 		return &openid.DefaultSession{Subject: userID}

@@ -587,6 +587,7 @@ func (r *PostgresRepository) RecordSecurityEvent(ctx context.Context, userID str
 	return err
 }
 
+// GetOrCreateDevice registers a device fingerprint for a user or updates its last seen timestamp.
 func (r *PostgresRepository) GetOrCreateDevice(ctx context.Context, userID string, fingerprintHash []byte, userAgent string, ip string) (string, error) {
 	displayName := strings.TrimSpace(userAgent)
 	if len(displayName) > 120 {
