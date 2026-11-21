@@ -3,6 +3,7 @@ package platformhttp
 import (
 	"encoding/json"
 	"errors"
+	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -11,6 +12,15 @@ import (
 	"github.com/Davysongs/TopChoiceBank/internal/identity/domain"
 	"github.com/Davysongs/TopChoiceBank/internal/platform/security"
 )
+
+// remoteIP extracts the client IP address without port from r.RemoteAddr.
+func remoteIP(r *http.Request) string {
+	ip := strings.TrimSpace(r.RemoteAddr)
+	if host, _, err := net.SplitHostPort(ip); err == nil {
+		return host
+	}
+	return ip
+}
 
 type ProblemDetails struct {
 	Type     string `json:"type"`
@@ -99,7 +109,7 @@ func handleLogin(service *identity.Service) http.HandlerFunc {
 			return
 		}
 
-		req.RequestIP = r.RemoteAddr
+		req.RequestIP = remoteIP(r)
 		req.UserAgent = r.UserAgent()
 		req.RequestID = r.Header.Get("X-Request-ID")
 
@@ -136,7 +146,7 @@ func handleRefresh(service *identity.Service) http.HandlerFunc {
 			return
 		}
 
-		req.RequestIP = r.RemoteAddr
+		req.RequestIP = remoteIP(r)
 		req.UserAgent = r.UserAgent()
 		req.RequestID = r.Header.Get("X-Request-ID")
 
@@ -219,7 +229,7 @@ func handleMFAEnroll(service *identity.Service) http.HandlerFunc {
 			UserID:    claims.Subject,
 			Password:  password,
 			Label:     label,
-			RequestIP: r.RemoteAddr,
+			RequestIP: remoteIP(r),
 			RequestID: r.Header.Get("X-Request-ID"),
 		})
 		if err != nil {
@@ -275,7 +285,7 @@ func handleMFAVerify(service *identity.Service) http.HandlerFunc {
 			UserID:    claims.Subject,
 			FactorID:  req.FactorID,
 			TOTPCode:  req.Code,
-			RequestIP: r.RemoteAddr,
+			RequestIP: remoteIP(r),
 			RequestID: r.Header.Get("X-Request-ID"),
 		})
 		if err != nil {
@@ -341,8 +351,11 @@ func handlePasswordChange(service *identity.Service) http.HandlerFunc {
 		recentMFA := false
 		for _, method := range claims.AMR {
 			if method == "mfa" {
-				if claims.AuthTime > 0 && time.Since(time.Unix(claims.AuthTime, 0)) < 10*time.Minute {
-					recentMFA = true
+				if claims.AuthTime > 0 {
+					age := time.Since(time.Unix(claims.AuthTime, 0))
+					if age >= 0 && age < 10*time.Minute {
+						recentMFA = true
+					}
 				}
 				break
 			}
@@ -356,7 +369,7 @@ func handlePasswordChange(service *identity.Service) http.HandlerFunc {
 			TOTPCode:        req.TOTPCode,
 			BackupCode:      req.BackupCode,
 			RecentMFA:       recentMFA,
-			RequestIP:       r.RemoteAddr,
+			RequestIP:       remoteIP(r),
 			RequestID:       r.Header.Get("X-Request-ID"),
 		})
 		if err != nil {

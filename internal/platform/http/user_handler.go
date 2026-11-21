@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	identitydomain "github.com/Davysongs/TopChoiceBank/internal/identity/domain"
 	"github.com/Davysongs/TopChoiceBank/internal/platform/security"
 	"github.com/Davysongs/TopChoiceBank/internal/users"
 	"github.com/Davysongs/TopChoiceBank/internal/users/domain"
@@ -21,41 +22,61 @@ func RegisterUserRoutes(router *Router, service *users.Service, jwtSecret string
 	router.HandleFunc("/v1/users/me", handleUserMe(service, jwtSecret))
 }
 
-// handleUserMe routes GET and PATCH requests for /v1/users/me.
+// handleUserMe routes GET and PATCH requests for /v1/users/me, enforcing required profile scopes.
 func handleUserMe(service *users.Service, jwtSecret string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		userID, ok := authenticateUser(w, r, jwtSecret)
+		claims, ok := authenticateUser(w, r, jwtSecret)
 		if !ok {
 			return
 		}
 
 		switch r.Method {
 		case http.MethodGet:
-			handleGetProfile(w, r, service, userID)
+			if !identitydomain.HasScope(claims.Scopes, identitydomain.ScopeProfileRead) {
+				writeProblem(w, http.StatusForbidden, "Scope Denied", "Insufficient scope for requested resource", r.URL.Path)
+				return
+			}
+			handleGetProfile(w, r, service, claims.Subject)
 		case http.MethodPatch:
-			handlePatchProfile(w, r, service, userID)
+			if !identitydomain.HasScope(claims.Scopes, identitydomain.ScopeProfileWrite) {
+				writeProblem(w, http.StatusForbidden, "Scope Denied", "Insufficient scope for requested resource", r.URL.Path)
+				return
+			}
+			handlePatchProfile(w, r, service, claims.Subject)
 		default:
 			writeProblem(w, http.StatusMethodNotAllowed, "Method Not Allowed", "Method not allowed on /v1/users/me", r.URL.Path)
 		}
 	}
 }
 
-// authenticateUser validates the Authorization Bearer JWT header and returns the authenticated user ID.
-func authenticateUser(w http.ResponseWriter, r *http.Request, jwtSecret string) (string, bool) {
-	authHeader := r.Header.Get("Authorization")
-	if strings.TrimSpace(authHeader) == "" || !strings.HasPrefix(authHeader, "Bearer ") {
+// authenticateUser validates the Authorization Bearer JWT header and returns the authenticated user's claims.
+func authenticateUser(w http.ResponseWriter, r *http.Request, jwtSecret string) (*security.JWTClaims, bool) {
+	tokenStr, ok := ParseBearerToken(r.Header.Get("Authorization"))
+	if !ok {
+		w.Header().Set("WWW-Authenticate", "Bearer")
 		writeProblem(w, http.StatusUnauthorized, "Unauthorized", "Bearer access token is required", r.URL.Path)
-		return "", false
+		return nil, false
 	}
 
-	tokenStr := strings.TrimPrefix(authHeader, "Bearer ")
 	claims, err := security.VerifyAccessToken(jwtSecret, tokenStr, time.Now().UTC())
 	if err != nil {
+		oauthTokenVerifierMu.RLock()
+		verifier := oauthTokenVerifier
+		oauthTokenVerifierMu.RUnlock()
+		if verifier != nil {
+			if oauthClaims, oerr := verifier(r.Context(), tokenStr); oerr == nil && oauthClaims != nil {
+				claims = oauthClaims
+				err = nil
+			}
+		}
+	}
+	if err != nil {
+		w.Header().Set("WWW-Authenticate", "Bearer")
 		writeProblem(w, http.StatusUnauthorized, "Unauthorized", "Invalid or expired access token", r.URL.Path)
-		return "", false
+		return nil, false
 	}
 
-	return claims.Subject, true
+	return claims, true
 }
 
 // handleGetProfile handles GET /v1/users/me, returning the caller's profile and current ETag version.

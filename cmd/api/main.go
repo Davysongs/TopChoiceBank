@@ -7,6 +7,7 @@ import (
 	"syscall"
 
 	"github.com/Davysongs/TopChoiceBank/internal/identity"
+	"github.com/Davysongs/TopChoiceBank/internal/identity/adapters/oauth"
 	"github.com/Davysongs/TopChoiceBank/internal/platform/config"
 	platformdb "github.com/Davysongs/TopChoiceBank/internal/platform/database"
 	platformhttp "github.com/Davysongs/TopChoiceBank/internal/platform/http"
@@ -56,6 +57,9 @@ func main() {
 		identityRepo := identity.NewPostgresRepository(db)
 		identityService := identity.NewService(identityRepo, cfg.JWTSecret)
 		platformhttp.RegisterAuthRoutes(router, identityService)
+
+		oauthAdapter := oauth.NewOAuthAdapter(db, cfg.JWTSecret)
+		platformhttp.RegisterOAuthRoutes(router, oauthAdapter, cfg.JWTSecret)
 
 		usersRepo := users.NewPostgresRepository(db)
 		usersService := users.NewService(usersRepo, identityRepo)

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"strings"
 	"time"
 
@@ -569,6 +570,15 @@ func (r *PostgresRepository) RevokeRefreshFamily(ctx context.Context, familyID s
 	return tx.Commit()
 }
 
+// cleanIP strips port numbers from raw IP strings for PostgreSQL inet column compatibility.
+func cleanIP(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if host, _, err := net.SplitHostPort(raw); err == nil {
+		return host
+	}
+	return raw
+}
+
 // RecordSecurityEvent stores an identity-related security audit event.
 func (r *PostgresRepository) RecordSecurityEvent(ctx context.Context, userID string, eventType string, outcome string, requestID string, sourceIP string, metadata map[string]any) error {
 	metadataBytes, err := json.Marshal(metadata)
@@ -583,7 +593,7 @@ func (r *PostgresRepository) RecordSecurityEvent(ctx context.Context, userID str
 			NULLIF($1, '')::uuid, $2, $3, $4, NULLIF($5, '')::inet, $6
 		)
 	`
-	_, err = r.db.ExecContext(ctx, query, userID, eventType, outcome, requestID, sourceIP, metadataBytes)
+	_, err = r.db.ExecContext(ctx, query, userID, eventType, outcome, requestID, cleanIP(sourceIP), metadataBytes)
 	return err
 }
 
@@ -608,7 +618,7 @@ func (r *PostgresRepository) GetOrCreateDevice(ctx context.Context, userID strin
 		RETURNING id
 	`
 	var id string
-	err := r.db.QueryRowContext(ctx, query, userID, fingerprintHash, displayName, ip).Scan(&id)
+	err := r.db.QueryRowContext(ctx, query, userID, fingerprintHash, displayName, cleanIP(ip)).Scan(&id)
 	if err != nil {
 		return "", fmt.Errorf("failed to get or create device: %w", err)
 	}

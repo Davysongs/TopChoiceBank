@@ -182,7 +182,8 @@ func RequireRecentMFA(maxAge time.Duration) Middleware {
 				return
 			}
 
-			if claims.AuthTime <= 0 || time.Since(time.Unix(claims.AuthTime, 0)) > maxAge {
+			age := time.Since(time.Unix(claims.AuthTime, 0))
+			if claims.AuthTime <= 0 || age < 0 || age > maxAge {
 				writeProblem(w, http.StatusForbidden, "Recent MFA Required", "MFA verification has expired; re-authentication required", r.URL.Path)
 				return
 			}
