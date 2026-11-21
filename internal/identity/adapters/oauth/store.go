@@ -40,6 +40,7 @@ type PostgresOAuthStore struct {
 	db               *sql.DB
 	consumedConsents map[string]time.Time
 	consumedMu       sync.RWMutex
+	clientsMu        sync.RWMutex
 }
 
 // NewPostgresOAuthStore initializes a new PostgresOAuthStore.
@@ -115,7 +116,9 @@ func (s *PostgresOAuthStore) RegisterClient(ctx context.Context, client *fosite.
 		}
 	}
 
+	s.clientsMu.Lock()
 	s.MemoryStore.Clients[client.ID] = client
+	s.clientsMu.Unlock()
 	return nil
 }
 
@@ -156,6 +159,8 @@ func (s *PostgresOAuthStore) GetClient(ctx context.Context, id string) (fosite.C
 		return nil, fmt.Errorf("failed to query oauth client: %w", err)
 	}
 
+	s.clientsMu.RLock()
+	defer s.clientsMu.RUnlock()
 	return s.MemoryStore.GetClient(ctx, id)
 }
 
@@ -422,5 +427,143 @@ func (s *PostgresOAuthStore) InvalidateAuthorizeCodeSession(ctx context.Context,
 	if memErr != nil && !errors.Is(memErr, fosite.ErrNotFound) {
 		return memErr
 	}
+	return nil
+}
+
+// CreateAccessTokenSession stores an OAuth access token session in memory and PostgreSQL.
+func (s *PostgresOAuthStore) CreateAccessTokenSession(ctx context.Context, signature string, req fosite.Requester) error {
+	if err := s.MemoryStore.CreateAccessTokenSession(ctx, signature, req); err != nil {
+		return err
+	}
+
+	if s.db == nil {
+		return nil
+	}
+
+	sigHash := sha256.Sum256([]byte(signature))
+	reqID := req.GetID()
+	clientID := req.GetClient().GetID()
+	userID := req.GetSession().GetSubject()
+	requestedAt := req.GetRequestedAt()
+
+	scopes := make([]string, 0)
+	for _, sc := range req.GetGrantedScopes() {
+		scopes = append(scopes, sc)
+	}
+
+	expiresAt := time.Now().UTC().Add(1 * time.Hour)
+	if expSession, ok := req.GetSession().(fosite.Session); ok && expSession != nil {
+		if t := expSession.GetExpiresAt(fosite.AccessToken); !t.IsZero() {
+			expiresAt = t
+		}
+	}
+
+	query := `
+		INSERT INTO identity.oauth_access_tokens (
+			signature_hash, request_id, client_id, user_id, scopes,
+			requested_at, expires_at, revoked
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, false)
+		ON CONFLICT (signature_hash) DO NOTHING
+	`
+	_, err := s.db.ExecContext(ctx, query,
+		sigHash[:],
+		reqID,
+		clientID,
+		userID,
+		pq.Array(scopes),
+		requestedAt,
+		expiresAt,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to persist access token: %w", err)
+	}
+
+	return nil
+}
+
+// GetAccessTokenSession retrieves an OAuth access token session from memory or PostgreSQL.
+func (s *PostgresOAuthStore) GetAccessTokenSession(ctx context.Context, signature string, session fosite.Session) (fosite.Requester, error) {
+	if s.db != nil {
+		sigHash := sha256.Sum256([]byte(signature))
+		var (
+			requestID   string
+			clientID    string
+			userID      string
+			scopes      []string
+			requestedAt time.Time
+			expiresAt   time.Time
+			revoked     bool
+		)
+
+		err := s.db.QueryRowContext(ctx, `
+			SELECT request_id, client_id, user_id, scopes, requested_at, expires_at, revoked
+			FROM identity.oauth_access_tokens
+			WHERE signature_hash = $1
+		`, sigHash[:]).Scan(
+			&requestID, &clientID, &userID, pq.Array(&scopes),
+			&requestedAt, &expiresAt, &revoked,
+		)
+		if err == nil {
+			if revoked {
+				return nil, fosite.ErrInactiveToken
+			}
+			if expiresAt.Before(time.Now().UTC()) {
+				return nil, fosite.ErrTokenExpired
+			}
+
+			memReq, memErr := s.MemoryStore.GetAccessTokenSession(ctx, signature, session)
+			if memErr == nil && memReq != nil {
+				return memReq, nil
+			}
+
+			client, clientErr := s.GetClient(ctx, clientID)
+			if clientErr != nil {
+				return nil, clientErr
+			}
+			sess := setSessionSubject(session, userID)
+			reconstructed := &fosite.Request{
+				ID:             requestID,
+				Client:         client,
+				RequestedScope: fosite.Arguments(scopes),
+				GrantedScope:   fosite.Arguments(scopes),
+				Session:        sess,
+				RequestedAt:    requestedAt,
+			}
+			return reconstructed, nil
+		}
+		if !errors.Is(err, sql.ErrNoRows) {
+			return nil, fmt.Errorf("failed to query access token: %w", err)
+		}
+	}
+
+	return s.MemoryStore.GetAccessTokenSession(ctx, signature, session)
+}
+
+// DeleteAccessTokenSession deletes an OAuth access token session from memory and PostgreSQL.
+func (s *PostgresOAuthStore) DeleteAccessTokenSession(ctx context.Context, signature string) error {
+	_ = s.MemoryStore.DeleteAccessTokenSession(ctx, signature)
+
+	if s.db != nil {
+		sigHash := sha256.Sum256([]byte(signature))
+		_, err := s.db.ExecContext(ctx, "DELETE FROM identity.oauth_access_tokens WHERE signature_hash = $1", sigHash[:])
+		if err != nil {
+			return fmt.Errorf("failed to delete access token from postgres: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// RevokeAccessToken marks all access tokens matching requestID as revoked.
+func (s *PostgresOAuthStore) RevokeAccessToken(ctx context.Context, requestID string) error {
+	_ = s.MemoryStore.RevokeAccessToken(ctx, requestID)
+
+	if s.db != nil {
+		_, err := s.db.ExecContext(ctx, "UPDATE identity.oauth_access_tokens SET revoked = true WHERE request_id = $1", requestID)
+		if err != nil {
+			return fmt.Errorf("failed to revoke access token in postgres: %w", err)
+		}
+	}
+
 	return nil
 }

@@ -12,6 +12,7 @@ import (
 	"github.com/ory/fosite"
 
 	"github.com/Davysongs/TopChoiceBank/internal/identity/adapters/oauth"
+	"github.com/Davysongs/TopChoiceBank/internal/identity/domain"
 	"github.com/Davysongs/TopChoiceBank/internal/platform/security"
 )
 
@@ -81,7 +82,9 @@ func handleOAuthAuthorizeGet(w http.ResponseWriter, r *http.Request, adapter *oa
 
 	requestedScopes := make([]string, 0)
 	for _, sc := range ar.GetRequestedScopes() {
-		requestedScopes = append(requestedScopes, sc)
+		if domain.HasScope(claims.Scopes, sc) {
+			requestedScopes = append(requestedScopes, sc)
+		}
 	}
 
 	consentToken, err := adapter.GenerateConsentToken(
@@ -191,11 +194,7 @@ func handleOAuthAuthorizePost(w http.ResponseWriter, r *http.Request, adapter *o
 
 	resp, err := adapter.Provider().NewAuthorizeResponse(r.Context(), ar, session)
 	if err != nil {
-		detail := err.Error()
-		if rfcErr, ok := err.(*fosite.RFC6749Error); ok {
-			detail = rfcErr.Error() + ": " + rfcErr.HintField + " - " + rfcErr.DebugField
-		}
-		writeProblem(w, http.StatusInternalServerError, "Internal Server Error", "Failed to issue authorization code: "+detail, r.URL.Path)
+		writeProblem(w, http.StatusInternalServerError, "Internal Server Error", "Failed to issue authorization code", r.URL.Path)
 		return
 	}
 
@@ -242,23 +241,13 @@ func handleOAuthToken(adapter *oauth.OAuthAdapter) http.HandlerFunc {
 		session := &fosite.DefaultSession{}
 		accessRequest, err := adapter.Provider().NewAccessRequest(r.Context(), r, session)
 		if err != nil {
-			w.Header().Set("Content-Type", "application/json;charset=UTF-8")
-			w.WriteHeader(http.StatusBadRequest)
-			_ = json.NewEncoder(w).Encode(map[string]any{
-				"error":             "invalid_grant",
-				"error_description": err.Error(),
-			})
+			adapter.Provider().WriteAccessError(r.Context(), w, accessRequest, err)
 			return
 		}
 
 		accessResponse, err := adapter.Provider().NewAccessResponse(r.Context(), accessRequest)
 		if err != nil {
-			w.Header().Set("Content-Type", "application/json;charset=UTF-8")
-			w.WriteHeader(http.StatusBadRequest)
-			_ = json.NewEncoder(w).Encode(map[string]any{
-				"error":             "invalid_grant",
-				"error_description": err.Error(),
-			})
+			adapter.Provider().WriteAccessError(r.Context(), w, accessRequest, err)
 			return
 		}
 

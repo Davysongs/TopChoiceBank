@@ -503,4 +503,23 @@ func TestOAuth2_SecurityRejections(t *testing.T) {
 		_, _ = buf.ReadFrom(respB.Body)
 		t.Fatalf("expected 200 OK exchanging code on instance B with empty cache, got %d: %s", respB.StatusCode, buf.String())
 	}
+
+	var tokenDataB map[string]any
+	_ = json.NewDecoder(respB.Body).Decode(&tokenDataB)
+	accessTokenB, _ := tokenDataB["access_token"].(string)
+	if accessTokenB == "" {
+		t.Fatal("expected access_token from instance B")
+	}
+
+	// 7. Multi-instance access token verification: access token issued by instance B can be used on instance A
+	reqA, _ := http.NewRequest(http.MethodGet, server.URL+"/v1/accounts/test", nil)
+	reqA.Header.Set("Authorization", "Bearer "+accessTokenB)
+	respA, err := http.DefaultClient.Do(reqA)
+	if err != nil {
+		t.Fatalf("request to instance A with token from instance B failed: %v", err)
+	}
+	defer respA.Body.Close()
+	if respA.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 OK calling instance A with token issued by instance B, got %d", respA.StatusCode)
+	}
 }

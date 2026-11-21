@@ -76,6 +76,20 @@ CREATE TABLE IF NOT EXISTS identity.oauth_consumed_consents (
   consumed_at timestamptz NOT NULL DEFAULT clock_timestamp()
 );
 
+-- identity.oauth_access_tokens
+CREATE TABLE IF NOT EXISTS identity.oauth_access_tokens (
+  signature_hash bytea PRIMARY KEY,
+  request_id text NOT NULL,
+  client_id text NOT NULL,
+  user_id text NOT NULL,
+  scopes text[] NOT NULL DEFAULT '{}',
+  requested_at timestamptz NOT NULL,
+  expires_at timestamptz NOT NULL,
+  revoked boolean NOT NULL DEFAULT false
+);
+
+CREATE INDEX IF NOT EXISTS oauth_tokens_request_id_idx ON identity.oauth_access_tokens (request_id);
+
 -- Covering index on active user roles
 CREATE INDEX IF NOT EXISTS user_roles_active_role_idx ON identity.user_roles (role_id, user_id)
   WHERE revoked_at IS NULL;
