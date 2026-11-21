@@ -66,6 +66,12 @@ func ClaimsFromContext(ctx context.Context) (*security.JWTClaims, bool) {
 
 // RequireAuth returns a route middleware that validates the Bearer token and injects claims into context.
 func RequireAuth(jwtSecret string) Middleware {
+	return RequireAuthWithVerifier(jwtSecret, nil)
+}
+
+// RequireAuthWithVerifier returns a route middleware that validates the Bearer token and injects claims into context,
+// using an explicit OAuth token verifier if provided, or falling back to the globally registered verifier.
+func RequireAuthWithVerifier(jwtSecret string, customVerifier TokenVerifierFunc) Middleware {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			tokenStr, ok := ParseBearerToken(r.Header.Get("Authorization"))
@@ -77,17 +83,22 @@ func RequireAuth(jwtSecret string) Middleware {
 
 			claims, err := security.VerifyAccessToken(jwtSecret, tokenStr, time.Now().UTC())
 			if err != nil {
-				// Try registered OAuth token verifier if configured
-				oauthTokenVerifierMu.RLock()
-				verifier := oauthTokenVerifier
-				oauthTokenVerifierMu.RUnlock()
-
-				var oauthClaims *security.JWTClaims
-				if verifier != nil {
-					oauthClaims, _ = verifier(r.Context(), tokenStr)
+				verifier := customVerifier
+				if verifier == nil {
+					oauthTokenVerifierMu.RLock()
+					verifier = oauthTokenVerifier
+					oauthTokenVerifierMu.RUnlock()
 				}
 
-				if oauthClaims != nil {
+				var (
+					oauthClaims *security.JWTClaims
+					oauthErr    error
+				)
+				if verifier != nil {
+					oauthClaims, oauthErr = verifier(r.Context(), tokenStr)
+				}
+
+				if oauthErr == nil && oauthClaims != nil {
 					claims = oauthClaims
 				} else {
 					w.Header().Set("WWW-Authenticate", "Bearer")

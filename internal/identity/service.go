@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/Davysongs/TopChoiceBank/internal/identity/domain"
 	platformdb "github.com/Davysongs/TopChoiceBank/internal/platform/database"
@@ -163,7 +164,7 @@ func (s *Service) Register(ctx context.Context, req RegisterRequest) (*RegisterR
 	if _, err := mail.ParseAddress(email); err != nil {
 		return nil, ErrInvalidEmail
 	}
-	if len(req.Password) < 8 {
+	if utf8.RuneCountInString(req.Password) < 8 {
 		return nil, ErrWeakPassword
 	}
 	if strings.TrimSpace(req.AcceptedTermsVersion) == "" {
@@ -802,7 +803,7 @@ func (s *Service) ChangePassword(ctx context.Context, req ChangePasswordRequest)
 		}
 	}
 
-	if len(req.NewPassword) < 8 {
+	if utf8.RuneCountInString(req.NewPassword) < 8 {
 		return nil, ErrWeakPassword
 	}
 	if req.NewPassword == oldPwd {
