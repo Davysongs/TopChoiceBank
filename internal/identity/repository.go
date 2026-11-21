@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/Davysongs/TopChoiceBank/internal/identity/domain"
 	platformdb "github.com/Davysongs/TopChoiceBank/internal/platform/database"
@@ -32,6 +33,14 @@ type Repository interface {
 	RevokeRefreshFamily(ctx context.Context, familyID string, reason string) error
 	RecordSecurityEvent(ctx context.Context, userID string, eventType string, outcome string, requestID string, sourceIP string, metadata map[string]any) error
 	GetOrCreateDevice(ctx context.Context, userID string, fingerprintHash []byte, userAgent string, ip string) (string, error)
+	CreatePendingTOTPFactor(ctx context.Context, factor *domain.MFAFactor, backupCodeHashes [][]byte) error
+	GetActiveTOTPFactor(ctx context.Context, userID string) (*domain.MFAFactor, error)
+	GetPendingTOTPFactor(ctx context.Context, userID string) (*domain.MFAFactor, error)
+	ActivateMFAFactorWithOutbox(ctx context.Context, factorID string, verifiedAt time.Time, outboxEvent platformdb.OutboxEventInput) error
+	ConsumeBackupCode(ctx context.Context, userID string, codeHash []byte) error
+	UpdatePasswordWithOutbox(ctx context.Context, userID string, newPasswordHash string, outboxEvent platformdb.OutboxEventInput) error
+	RevokeAllRefreshFamilies(ctx context.Context, userID string, reason string) (int, error)
+	GetUserRoles(ctx context.Context, userID string) ([]string, error)
 }
 
 type PostgresRepository struct {
@@ -467,4 +476,269 @@ func (r *PostgresRepository) GetOrCreateDevice(ctx context.Context, userID strin
 		return "", fmt.Errorf("failed to get or create device: %w", err)
 	}
 	return id, nil
+}
+
+// CreatePendingTOTPFactor stores a new PENDING TOTP factor and its hashed backup codes.
+// Any existing PENDING factor for the user is cleaned up so the user can re-enroll cleanly.
+func (r *PostgresRepository) CreatePendingTOTPFactor(ctx context.Context, factor *domain.MFAFactor, backupCodeHashes [][]byte) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	_, err = tx.ExecContext(ctx, "DELETE FROM identity.mfa_factors WHERE user_id = $1 AND status = 'PENDING'", factor.UserID())
+	if err != nil {
+		return fmt.Errorf("failed to clean up pending mfa factors: %w", err)
+	}
+
+	factorQuery := `
+		INSERT INTO identity.mfa_factors (
+			id, user_id, factor_type, label, encrypted_secret, key_version, status, created_at
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+	`
+	_, err = tx.ExecContext(ctx, factorQuery,
+		factor.ID(),
+		factor.UserID(),
+		factor.FactorType(),
+		factor.Label(),
+		factor.EncryptedSecret(),
+		factor.KeyVersion(),
+		string(factor.Status()),
+		factor.CreatedAt(),
+	)
+	if err != nil {
+		return fmt.Errorf("failed to insert mfa factor: %w", err)
+	}
+
+	for _, hash := range backupCodeHashes {
+		_, err = tx.ExecContext(ctx, `
+			INSERT INTO identity.mfa_backup_codes (factor_id, code_hash, created_at)
+			VALUES ($1, $2, clock_timestamp())
+		`, factor.ID(), hash)
+		if err != nil {
+			return fmt.Errorf("failed to insert backup code: %w", err)
+		}
+	}
+
+	return tx.Commit()
+}
+
+// GetActiveTOTPFactor returns the active TOTP factor for a user, or nil if none exists.
+func (r *PostgresRepository) GetActiveTOTPFactor(ctx context.Context, userID string) (*domain.MFAFactor, error) {
+	query := `
+		SELECT id, user_id, factor_type, label, encrypted_secret, key_version, status, verified_at, revoked_at, created_at
+		FROM identity.mfa_factors
+		WHERE user_id = $1 AND factor_type = 'TOTP' AND status = 'ACTIVE'
+		LIMIT 1
+	`
+	var (
+		id              string
+		uID             string
+		factorType      string
+		label           string
+		encryptedSecret []byte
+		keyVersion      int
+		status          string
+		verifiedAt      *time.Time
+		revokedAt       *time.Time
+		createdAt       time.Time
+	)
+	err := r.db.QueryRowContext(ctx, query, userID).Scan(
+		&id, &uID, &factorType, &label, &encryptedSecret, &keyVersion, &status, &verifiedAt, &revokedAt, &createdAt,
+	)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to query active totp factor: %w", err)
+	}
+
+	return domain.ReconstituteMFAFactor(id, uID, factorType, label, encryptedSecret, keyVersion, domain.FactorStatus(status), verifiedAt, revokedAt, createdAt)
+}
+
+// GetPendingTOTPFactor returns the unverified PENDING factor for a user, or nil if none exists.
+func (r *PostgresRepository) GetPendingTOTPFactor(ctx context.Context, userID string) (*domain.MFAFactor, error) {
+	query := `
+		SELECT id, user_id, factor_type, label, encrypted_secret, key_version, status, verified_at, revoked_at, created_at
+		FROM identity.mfa_factors
+		WHERE user_id = $1 AND factor_type = 'TOTP' AND status = 'PENDING'
+		ORDER BY created_at DESC LIMIT 1
+	`
+	var (
+		id              string
+		uID             string
+		factorType      string
+		label           string
+		encryptedSecret []byte
+		keyVersion      int
+		status          string
+		verifiedAt      *time.Time
+		revokedAt       *time.Time
+		createdAt       time.Time
+	)
+	err := r.db.QueryRowContext(ctx, query, userID).Scan(
+		&id, &uID, &factorType, &label, &encryptedSecret, &keyVersion, &status, &verifiedAt, &revokedAt, &createdAt,
+	)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to query pending totp factor: %w", err)
+	}
+
+	return domain.ReconstituteMFAFactor(id, uID, factorType, label, encryptedSecret, keyVersion, domain.FactorStatus(status), verifiedAt, revokedAt, createdAt)
+}
+
+// ActivateMFAFactorWithOutbox activates a PENDING factor and appends outbox event atomically.
+func (r *PostgresRepository) ActivateMFAFactorWithOutbox(ctx context.Context, factorID string, verifiedAt time.Time, outboxEvent platformdb.OutboxEventInput) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	res, err := tx.ExecContext(ctx, `
+		UPDATE identity.mfa_factors
+		SET status = 'ACTIVE', verified_at = $2
+		WHERE id = $1 AND status = 'PENDING'
+	`, factorID, verifiedAt)
+	if err != nil {
+		var pqErr *pq.Error
+		if errors.As(err, &pqErr) && pqErr.Code == "23505" {
+			return errors.New("an active TOTP factor already exists for this user")
+		}
+		return fmt.Errorf("failed to activate mfa factor: %w", err)
+	}
+
+	rows, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return errors.New("mfa factor not found or not in pending status")
+	}
+
+	if err := platformdb.AppendOutboxEvent(ctx, tx, outboxEvent); err != nil {
+		return fmt.Errorf("failed to append outbox event: %w", err)
+	}
+
+	return tx.Commit()
+}
+
+// ConsumeBackupCode verifies and atomically marks an unused backup code as consumed.
+func (r *PostgresRepository) ConsumeBackupCode(ctx context.Context, userID string, codeHash []byte) error {
+	query := `
+		UPDATE identity.mfa_backup_codes
+		SET consumed_at = clock_timestamp()
+		WHERE code_hash = $1
+		  AND consumed_at IS NULL
+		  AND factor_id IN (
+			  SELECT id FROM identity.mfa_factors WHERE user_id = $2 AND status = 'ACTIVE'
+		  )
+	`
+	res, err := r.db.ExecContext(ctx, query, codeHash, userID)
+	if err != nil {
+		return fmt.Errorf("failed to consume backup code: %w", err)
+	}
+	rows, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return domain.ErrInvalidBackupCode
+	}
+	return nil
+}
+
+// UpdatePasswordWithOutbox updates a user's password hash and emits identity.password_changed.v1 outbox event atomically.
+func (r *PostgresRepository) UpdatePasswordWithOutbox(ctx context.Context, userID string, newPasswordHash string, outboxEvent platformdb.OutboxEventInput) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	query := `
+		UPDATE identity.users
+		SET password_hash = $2, password_changed_at = clock_timestamp(), version = version + 1, updated_at = clock_timestamp()
+		WHERE id = $1
+	`
+	res, err := tx.ExecContext(ctx, query, userID, newPasswordHash)
+	if err != nil {
+		return fmt.Errorf("failed to update password hash: %w", err)
+	}
+	rows, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return ErrUserNotFound
+	}
+
+	if err := platformdb.AppendOutboxEvent(ctx, tx, outboxEvent); err != nil {
+		return fmt.Errorf("failed to append outbox event: %w", err)
+	}
+
+	return tx.Commit()
+}
+
+// RevokeAllRefreshFamilies revokes all active refresh families and sessions for a user, returning the count of revoked sessions.
+func (r *PostgresRepository) RevokeAllRefreshFamilies(ctx context.Context, userID string, reason string) (int, error) {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+
+	_, err = tx.ExecContext(ctx, `
+		UPDATE identity.refresh_families
+		SET revoked_at = clock_timestamp(), revoked_reason = $2
+		WHERE user_id = $1 AND revoked_at IS NULL
+	`, userID, reason)
+	if err != nil {
+		return 0, fmt.Errorf("failed to revoke refresh families: %w", err)
+	}
+
+	res, err := tx.ExecContext(ctx, `
+		UPDATE identity.sessions
+		SET revoked_at = clock_timestamp(), revoke_reason = $2
+		WHERE user_id = $1 AND revoked_at IS NULL
+	`, userID, reason)
+	if err != nil {
+		return 0, fmt.Errorf("failed to revoke sessions: %w", err)
+	}
+
+	rows, _ := res.RowsAffected()
+
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+	return int(rows), nil
+}
+
+// GetUserRoles retrieves the list of active role names for a user.
+func (r *PostgresRepository) GetUserRoles(ctx context.Context, userID string) ([]string, error) {
+	query := `
+		SELECT r.name
+		FROM identity.user_roles ur
+		JOIN identity.roles r ON ur.role_id = r.id
+		WHERE ur.user_id = $1 AND ur.revoked_at IS NULL
+		ORDER BY r.name
+	`
+	rows, err := r.db.QueryContext(ctx, query, userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query user roles: %w", err)
+	}
+	defer rows.Close()
+
+	var roles []string
+	for rows.Next() {
+		var role string
+		if err := rows.Scan(&role); err != nil {
+			return nil, err
+		}
+		roles = append(roles, role)
+	}
+	return roles, rows.Err()
 }

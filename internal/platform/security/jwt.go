@@ -17,11 +17,15 @@ var (
 )
 
 type JWTClaims struct {
-	Subject   string `json:"sub"`
-	JTI       string `json:"jti"`
-	Issuer    string `json:"iss"`
-	IssuedAt  int64  `json:"iat"`
-	ExpiresAt int64  `json:"exp"`
+	Subject   string   `json:"sub"`
+	JTI       string   `json:"jti"`
+	Issuer    string   `json:"iss"`
+	IssuedAt  int64    `json:"iat"`
+	ExpiresAt int64    `json:"exp"`
+	Roles     []string `json:"roles,omitempty"`
+	Scopes    []string `json:"scopes,omitempty"`
+	AMR       []string `json:"amr,omitempty"`
+	AuthTime  int64    `json:"auth_time,omitempty"`
 }
 
 type TokenPair struct {
@@ -33,6 +37,18 @@ type TokenPair struct {
 
 // GenerateAccessToken creates an HMAC-SHA256 access token for a user.
 func GenerateAccessToken(secret string, userID string, jti string, now time.Time, duration time.Duration) (string, error) {
+	claims := JWTClaims{
+		Subject:   userID,
+		JTI:       jti,
+		Issuer:    "topchoicebank",
+		IssuedAt:  now.Unix(),
+		ExpiresAt: now.Add(duration).Unix(),
+	}
+	return GenerateAccessTokenWithClaims(secret, claims)
+}
+
+// GenerateAccessTokenWithClaims creates an HMAC-SHA256 access token with full claims.
+func GenerateAccessTokenWithClaims(secret string, claims JWTClaims) (string, error) {
 	if secret == "" {
 		return "", errors.New("jwt secret is required")
 	}
@@ -47,12 +63,8 @@ func GenerateAccessToken(secret string, userID string, jti string, now time.Time
 		return "", err
 	}
 
-	claims := JWTClaims{
-		Subject:   userID,
-		JTI:       jti,
-		Issuer:    "topchoicebank",
-		IssuedAt:  now.Unix(),
-		ExpiresAt: now.Add(duration).Unix(),
+	if claims.Issuer == "" {
+		claims.Issuer = "topchoicebank"
 	}
 
 	claimsJSON, err := json.Marshal(claims)

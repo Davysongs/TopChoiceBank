@@ -53,6 +53,7 @@ type LoginRequest struct {
 	Password          string `json:"password"`
 	DeviceFingerprint string `json:"device_fingerprint"`
 	TOTPCode          string `json:"totp_code,omitempty"`
+	BackupCode        string `json:"backup_code,omitempty"`
 	RequestIP         string `json:"-"`
 	UserAgent         string `json:"-"`
 	RequestID         string `json:"-"`
@@ -64,6 +65,7 @@ type LoginResponse struct {
 	RefreshToken string `json:"refresh_token"`
 	SessionID    string `json:"session_id"`
 	MFARequired  bool   `json:"mfa_required"`
+	MFAFactorID  string `json:"mfa_factor_id,omitempty"`
 }
 
 type RefreshRequest struct {
@@ -74,19 +76,79 @@ type RefreshRequest struct {
 	RequestID         string `json:"-"`
 }
 
+type EnrollTOTPRequest struct {
+	UserID    string `json:"-"`
+	Password  string `json:"password"`
+	Label     string `json:"label"`
+	RequestIP string `json:"-"`
+	RequestID string `json:"-"`
+}
+
+type EnrollTOTPResponse struct {
+	FactorID    string    `json:"factor_id"`
+	OtpauthURI  string    `json:"otpauth_uri"`
+	BackupCodes []string  `json:"backup_codes"`
+	ExpiresAt   time.Time `json:"expires_at"`
+}
+
+type VerifyTOTPRequest struct {
+	UserID    string `json:"-"`
+	FactorID  string `json:"factor_id,omitempty"`
+	TOTPCode  string `json:"code"`
+	RequestIP string `json:"-"`
+	RequestID string `json:"-"`
+}
+
+type VerifyTOTPResponse struct {
+	FactorID   string    `json:"factor_id"`
+	Status     string    `json:"status"`
+	VerifiedAt time.Time `json:"verified_at"`
+}
+
+type ChangePasswordRequest struct {
+	UserID          string `json:"-"`
+	CurrentPassword string `json:"current_password,omitempty"`
+	OldPassword     string `json:"old_password,omitempty"`
+	NewPassword     string `json:"new_password"`
+	TOTPCode        string `json:"totp_code,omitempty"`
+	BackupCode      string `json:"backup_code,omitempty"`
+	RecentMFA       bool   `json:"-"`
+	RequestIP       string `json:"-"`
+	RequestID       string `json:"-"`
+}
+
+type ChangePasswordResponse struct {
+	ChangedAt       time.Time `json:"changed_at"`
+	RevokedSessions int       `json:"revoked_sessions"`
+}
+
 type Service struct {
 	repo      Repository
 	jwtSecret string
 	hasher    domain.PasswordHasher
+	encryptor security.TransitEncryptor
 }
 
 // NewService creates an identity service with the supplied repository and JWT secret.
 func NewService(repo Repository, jwtSecret string) *Service {
+	enc, _ := security.NewAESGCMTransitEncryptor(jwtSecret, 1)
 	return &Service{
 		repo:      repo,
 		jwtSecret: jwtSecret,
 		hasher:    domain.Argon2idPasswordHasher{},
+		encryptor: enc,
 	}
+}
+
+// WithTransitEncryptor overrides the default transit encryptor.
+func (s *Service) WithTransitEncryptor(encryptor security.TransitEncryptor) *Service {
+	s.encryptor = encryptor
+	return s
+}
+
+// JWTSecret returns the service JWT signing secret.
+func (s *Service) JWTSecret() string {
+	return s.jwtSecret
 }
 
 // Register validates a registration request and creates a pending customer account.
@@ -202,6 +264,39 @@ func (s *Service) Login(ctx context.Context, req LoginRequest) (*LoginResponse, 
 		return nil, err
 	}
 
+	activeFactor, err := s.repo.GetActiveTOTPFactor(ctx, user.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	mfaVerified := false
+	if activeFactor != nil {
+		if strings.TrimSpace(req.TOTPCode) == "" && strings.TrimSpace(req.BackupCode) == "" {
+			return &LoginResponse{
+				MFARequired: true,
+				MFAFactorID: activeFactor.ID(),
+			}, nil
+		}
+		if strings.TrimSpace(req.TOTPCode) != "" {
+			secretBytes, err := s.encryptor.Decrypt(ctx, activeFactor.EncryptedSecret(), activeFactor.KeyVersion())
+			if err != nil {
+				return nil, fmt.Errorf("failed to decrypt factor secret: %w", err)
+			}
+			valid, err := domain.VerifyTOTPCode(string(secretBytes), req.TOTPCode, now)
+			if err != nil || !valid {
+				_ = s.repo.RecordSecurityEvent(ctx, user.ID, "identity.mfa_failed.v1", "FAILURE", req.RequestID, req.RequestIP, map[string]any{"reason": "invalid_totp"})
+				return nil, domain.ErrInvalidTOTPCode
+			}
+			mfaVerified = true
+		} else if strings.TrimSpace(req.BackupCode) != "" {
+			if err := s.ConsumeBackupCode(ctx, user.ID, req.BackupCode); err != nil {
+				_ = s.repo.RecordSecurityEvent(ctx, user.ID, "identity.mfa_failed.v1", "FAILURE", req.RequestID, req.RequestIP, map[string]any{"reason": "invalid_backup_code"})
+				return nil, domain.ErrInvalidBackupCode
+			}
+			mfaVerified = true
+		}
+	}
+
 	var deviceIDPtr *string
 	if strings.TrimSpace(req.DeviceFingerprint) != "" {
 		fpHash := security.HashToken(req.DeviceFingerprint)
@@ -249,7 +344,28 @@ func (s *Service) Login(ctx context.Context, req LoginRequest) (*LoginResponse, 
 		return nil, err
 	}
 
-	accessToken, err := security.GenerateAccessToken(s.jwtSecret, user.ID, jti, now, jwtDuration)
+	roles, err := s.repo.GetUserRoles(ctx, user.ID)
+	if err != nil || len(roles) == 0 {
+		roles = []string{"customer"}
+	}
+
+	amr := []string{"pwd"}
+	if mfaVerified {
+		amr = append(amr, "mfa")
+	}
+
+	claims := security.JWTClaims{
+		Subject:   user.ID,
+		JTI:       jti,
+		Issuer:    "topchoicebank",
+		IssuedAt:  now.Unix(),
+		ExpiresAt: now.Add(jwtDuration).Unix(),
+		Roles:     roles,
+		AMR:       amr,
+		AuthTime:  now.Unix(),
+	}
+
+	accessToken, err := security.GenerateAccessTokenWithClaims(s.jwtSecret, claims)
 	if err != nil {
 		return nil, err
 	}
@@ -376,7 +492,23 @@ func (s *Service) RefreshSession(ctx context.Context, req RefreshRequest) (*Logi
 		return nil, err
 	}
 
-	accessToken, err := security.GenerateAccessToken(s.jwtSecret, agg.Session.UserID, nextJTI, now, jwtDuration)
+	roles, err := s.repo.GetUserRoles(ctx, agg.Session.UserID)
+	if err != nil || len(roles) == 0 {
+		roles = []string{"customer"}
+	}
+
+	claims := security.JWTClaims{
+		Subject:   agg.Session.UserID,
+		JTI:       nextJTI,
+		Issuer:    "topchoicebank",
+		IssuedAt:  now.Unix(),
+		ExpiresAt: now.Add(jwtDuration).Unix(),
+		Roles:     roles,
+		AMR:       []string{"refresh"},
+		AuthTime:  now.Unix(),
+	}
+
+	accessToken, err := security.GenerateAccessTokenWithClaims(s.jwtSecret, claims)
 	if err != nil {
 		return nil, err
 	}
@@ -412,4 +544,215 @@ func formatUserAgent(ua string) string {
 		return ua[:512]
 	}
 	return ua
+}
+
+// EnrollTOTP validates current password, creates a Vault-encrypted TOTP factor and hashed backup codes.
+func (s *Service) EnrollTOTP(ctx context.Context, req EnrollTOTPRequest) (*EnrollTOTPResponse, error) {
+	if strings.TrimSpace(req.UserID) == "" {
+		return nil, domain.ErrMissingUserID
+	}
+
+	user, err := s.repo.GetUserByID(ctx, req.UserID)
+	if err != nil {
+		return nil, err
+	}
+
+	if !s.hasher.Verify(req.Password, user.PasswordHash) {
+		_ = s.repo.RecordSecurityEvent(ctx, req.UserID, "identity.mfa_enrol_failed.v1", "FAILURE", req.RequestID, req.RequestIP, map[string]any{"reason": "invalid_password"})
+		return nil, ErrInvalidCredentials
+	}
+
+	activeFactor, err := s.repo.GetActiveTOTPFactor(ctx, req.UserID)
+	if err != nil {
+		return nil, err
+	}
+	if activeFactor != nil {
+		return nil, domain.ErrFactorAlreadyActive
+	}
+
+	secret, err := domain.GenerateTOTPSecret()
+	if err != nil {
+		return nil, err
+	}
+
+	encryptedSecret, keyVersion, err := s.encryptor.Encrypt(ctx, []byte(secret))
+	if err != nil {
+		return nil, fmt.Errorf("failed to encrypt totp secret: %w", err)
+	}
+
+	plainCodes, hashes, err := domain.GenerateBackupCodes(10)
+	if err != nil {
+		return nil, err
+	}
+
+	label := strings.TrimSpace(req.Label)
+	if label == "" {
+		label = "Personal Authenticator"
+	}
+
+	now := time.Now().UTC()
+	factor, err := domain.NewPendingTOTPFactor(user.ID, label, encryptedSecret, keyVersion, now)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := s.repo.CreatePendingTOTPFactor(ctx, factor, hashes); err != nil {
+		return nil, err
+	}
+
+	otpauthURI := fmt.Sprintf("otpauth://totp/TopChoiceBank:%s?secret=%s&issuer=TopChoiceBank&algorithm=SHA1&digits=6&period=30", user.Email, secret)
+
+	return &EnrollTOTPResponse{
+		FactorID:    factor.ID(),
+		OtpauthURI:  otpauthURI,
+		BackupCodes: plainCodes,
+		ExpiresAt:   now.Add(15 * time.Minute),
+	}, nil
+}
+
+// VerifyTOTP verifies the supplied 6-digit TOTP code, transitions factor to ACTIVE, and emits identity.mfa_enrolled.v1.
+func (s *Service) VerifyTOTP(ctx context.Context, req VerifyTOTPRequest) (*VerifyTOTPResponse, error) {
+	if strings.TrimSpace(req.UserID) == "" {
+		return nil, domain.ErrMissingUserID
+	}
+
+	factor, err := s.repo.GetPendingTOTPFactor(ctx, req.UserID)
+	if err != nil {
+		return nil, err
+	}
+	if factor == nil {
+		return nil, errors.New("no pending mfa factor found for verification")
+	}
+
+	secretBytes, err := s.encryptor.Decrypt(ctx, factor.EncryptedSecret(), factor.KeyVersion())
+	if err != nil {
+		return nil, fmt.Errorf("failed to decrypt factor secret: %w", err)
+	}
+
+	now := time.Now().UTC()
+	valid, err := domain.VerifyTOTPCode(string(secretBytes), req.TOTPCode, now)
+	if err != nil || !valid {
+		_ = s.repo.RecordSecurityEvent(ctx, req.UserID, "identity.mfa_verify_failed.v1", "FAILURE", req.RequestID, req.RequestIP, map[string]any{"reason": "invalid_code"})
+		return nil, domain.ErrInvalidTOTPCode
+	}
+
+	outboxEvent := platformdb.OutboxEventInput{
+		AggregateType:    "identity.mfa_factors",
+		AggregateID:      factor.ID(),
+		AggregateVersion: 1,
+		EventType:        "identity.mfa_enrolled.v1",
+		SchemaVersion:    1,
+		Payload: map[string]any{
+			"user_id":     factor.UserID(),
+			"factor_id":   factor.ID(),
+			"factor_type": factor.FactorType(),
+		},
+		OccurredAt: now,
+	}
+
+	if err := s.repo.ActivateMFAFactorWithOutbox(ctx, factor.ID(), now, outboxEvent); err != nil {
+		return nil, err
+	}
+
+	_ = s.repo.RecordSecurityEvent(ctx, req.UserID, "identity.mfa_enrolled.v1", "SUCCESS", req.RequestID, req.RequestIP, map[string]any{"factor_id": factor.ID()})
+
+	return &VerifyTOTPResponse{
+		FactorID:   factor.ID(),
+		Status:     "ACTIVE",
+		VerifiedAt: now,
+	}, nil
+}
+
+// ConsumeBackupCode consumes a single-use backup code.
+func (s *Service) ConsumeBackupCode(ctx context.Context, userID, code string) error {
+	if strings.TrimSpace(userID) == "" {
+		return domain.ErrMissingUserID
+	}
+	hash := domain.HashBackupCode(code)
+	return s.repo.ConsumeBackupCode(ctx, userID, hash)
+}
+
+// ChangePassword changes the user password, requiring recent MFA or TOTP/backup code confirmation.
+func (s *Service) ChangePassword(ctx context.Context, req ChangePasswordRequest) (*ChangePasswordResponse, error) {
+	if strings.TrimSpace(req.UserID) == "" {
+		return nil, domain.ErrMissingUserID
+	}
+
+	user, err := s.repo.GetUserByID(ctx, req.UserID)
+	if err != nil {
+		return nil, err
+	}
+
+	oldPwd := req.CurrentPassword
+	if oldPwd == "" {
+		oldPwd = req.OldPassword
+	}
+
+	if !s.hasher.Verify(oldPwd, user.PasswordHash) {
+		_ = s.repo.RecordSecurityEvent(ctx, req.UserID, "identity.password_change_failed.v1", "FAILURE", req.RequestID, req.RequestIP, map[string]any{"reason": "invalid_old_password"})
+		return nil, ErrInvalidCredentials
+	}
+
+	activeFactor, err := s.repo.GetActiveTOTPFactor(ctx, req.UserID)
+	if err != nil {
+		return nil, err
+	}
+
+	now := time.Now().UTC()
+	if activeFactor != nil {
+		if req.RecentMFA {
+			// recent MFA verification claim satisfied
+		} else if strings.TrimSpace(req.TOTPCode) != "" {
+			secretBytes, err := s.encryptor.Decrypt(ctx, activeFactor.EncryptedSecret(), activeFactor.KeyVersion())
+			if err != nil {
+				return nil, err
+			}
+			valid, err := domain.VerifyTOTPCode(string(secretBytes), req.TOTPCode, now)
+			if err != nil || !valid {
+				return nil, domain.ErrInvalidTOTPCode
+			}
+		} else if strings.TrimSpace(req.BackupCode) != "" {
+			if err := s.ConsumeBackupCode(ctx, req.UserID, req.BackupCode); err != nil {
+				return nil, err
+			}
+		} else {
+			return nil, errors.New("recent mfa verification or totp code required")
+		}
+	}
+
+	if len(req.NewPassword) < 8 {
+		return nil, ErrWeakPassword
+	}
+	if req.NewPassword == oldPwd {
+		return nil, errors.New("new password must be different from current password")
+	}
+
+	newHash, err := s.hasher.Hash(req.NewPassword)
+	if err != nil {
+		return nil, fmt.Errorf("failed to hash new password: %w", err)
+	}
+
+	outboxEvent := platformdb.OutboxEventInput{
+		AggregateType:    "identity.users",
+		AggregateID:      user.ID,
+		AggregateVersion: user.Version + 1,
+		EventType:        "identity.password_changed.v1",
+		SchemaVersion:    1,
+		Payload: map[string]any{
+			"user_id": user.ID,
+		},
+		OccurredAt: now,
+	}
+
+	if err := s.repo.UpdatePasswordWithOutbox(ctx, user.ID, newHash, outboxEvent); err != nil {
+		return nil, err
+	}
+
+	revokedCount, _ := s.repo.RevokeAllRefreshFamilies(ctx, user.ID, "password_changed")
+	_ = s.repo.RecordSecurityEvent(ctx, req.UserID, "identity.password_changed.v1", "SUCCESS", req.RequestID, req.RequestIP, nil)
+
+	return &ChangePasswordResponse{
+		ChangedAt:       now,
+		RevokedSessions: revokedCount,
+	}, nil
 }
