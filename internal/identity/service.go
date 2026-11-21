@@ -36,7 +36,7 @@ var (
 const (
 	lockoutWindow          = 15 * time.Minute
 	lockoutDuration        = 30 * time.Minute
-	maxAttempts             = 5
+	maxAttempts            = 5
 	jwtDuration            = 15 * time.Minute
 	refreshSessionDuration = 7 * 24 * time.Hour
 )
@@ -48,8 +48,8 @@ type RegisterRequest struct {
 }
 
 type RegisterResponse struct {
-	UserID                   string `json:"user_id"`
-	Status                   string `json:"status"`
+	UserID                    string `json:"user_id"`
+	Status                    string `json:"status"`
 	EmailVerificationRequired bool   `json:"email_verification_required"`
 }
 
@@ -206,8 +206,8 @@ func (s *Service) Register(ctx context.Context, req RegisterRequest) (*RegisterR
 	}
 
 	return &RegisterResponse{
-		UserID:                   user.ID,
-		Status:                   string(user.Status),
+		UserID:                    user.ID,
+		Status:                    string(user.Status),
 		EmailVerificationRequired: true,
 	}, nil
 }

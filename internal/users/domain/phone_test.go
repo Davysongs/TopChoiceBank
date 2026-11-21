@@ -116,4 +116,3 @@ func TestPhone_Equals(t *testing.T) {
 		t.Errorf("expected p1 not to equal p3")
 	}
 }
-

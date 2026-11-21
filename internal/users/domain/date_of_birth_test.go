@@ -254,4 +254,3 @@ func TestDateOfBirth_Equals(t *testing.T) {
 		t.Errorf("expected d1 not to equal d4")
 	}
 }
-

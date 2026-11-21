@@ -155,4 +155,3 @@ func (a Address) Equals(other Address) bool {
 func (a Address) IsZero() bool {
 	return a.line1 == "" && a.city == "" && a.countryCode == ""
 }
-
