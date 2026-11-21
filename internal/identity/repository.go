@@ -48,7 +48,7 @@ type Repository interface {
 	ActivateMFAFactorWithOutbox(ctx context.Context, factorID string, verifiedAt time.Time, outboxEvent platformdb.OutboxEventInput) error
 	ConsumeBackupCode(ctx context.Context, userID string, codeHash []byte) error
 	UpdatePasswordWithOutbox(ctx context.Context, userID string, newPasswordHash string, outboxEvent platformdb.OutboxEventInput) error
-	RotatePasswordTx(ctx context.Context, userID string, newPasswordHash string, backupCodeHash []byte, outboxEvent platformdb.OutboxEventInput) (int, error)
+	RotatePasswordTx(ctx context.Context, userID string, expectedVersion int64, newPasswordHash string, backupCodeHash []byte, outboxEvent platformdb.OutboxEventInput) (int, error)
 	RevokeAllRefreshFamilies(ctx context.Context, userID string, reason string) (int, error)
 	GetUserRoles(ctx context.Context, userID string) ([]string, error)
 }
@@ -321,7 +321,7 @@ func (r *PostgresRepository) CreateSessionAndFamilyWithMFA(
 		res, err := tx.ExecContext(ctx, `
 			UPDATE identity.mfa_factors
 			SET last_totp_step = $2
-			WHERE id = $1 AND (last_totp_step IS NULL OR last_totp_step < $2)
+			WHERE id = $1 AND status = 'ACTIVE' AND (last_totp_step IS NULL OR last_totp_step < $2)
 		`, mfaInput.TOTPFactorID, mfaInput.TOTPStep)
 		if err != nil {
 			return fmt.Errorf("failed to record totp step: %w", err)
@@ -758,6 +758,16 @@ func (r *PostgresRepository) ActivateMFAFactorWithOutbox(ctx context.Context, fa
 		return domain.ErrFactorNotPending
 	}
 
+	// Invalidate user version so any in-flight password-only logins cannot create sessions
+	_, err = tx.ExecContext(ctx, `
+		UPDATE identity.users
+		SET version = version + 1, updated_at = clock_timestamp()
+		WHERE id = (SELECT user_id FROM identity.mfa_factors WHERE id = $1)
+	`, factorID)
+	if err != nil {
+		return fmt.Errorf("failed to increment user version on mfa activation: %w", err)
+	}
+
 	if err := platformdb.AppendOutboxEvent(ctx, tx, outboxEvent); err != nil {
 		return fmt.Errorf("failed to append outbox event: %w", err)
 	}
@@ -822,11 +832,12 @@ func (r *PostgresRepository) UpdatePasswordWithOutbox(ctx context.Context, userI
 	return tx.Commit()
 }
 
-// RotatePasswordTx atomically updates password hash, increments version, consumes backup code (if provided),
-// revokes active refresh families and sessions, and appends outbox event with updated row version.
+// RotatePasswordTx atomically acquires the user lock, verifies credential version, consumes any backup code,
+// updates password hash, revokes all other refresh families and sessions, and appends outbox event in one transaction.
 func (r *PostgresRepository) RotatePasswordTx(
 	ctx context.Context,
 	userID string,
+	expectedVersion int64,
 	newPasswordHash string,
 	backupCodeHash []byte,
 	outboxEvent platformdb.OutboxEventInput,
@@ -837,7 +848,20 @@ func (r *PostgresRepository) RotatePasswordTx(
 	}
 	defer tx.Rollback()
 
-	// If backup code used, atomically consume it first
+	// 1. Acquire user lock first to enforce lock ordering and verify credential version
+	var currentVersion int64
+	err = tx.QueryRowContext(ctx, "SELECT version FROM identity.users WHERE id = $1 FOR UPDATE", userID).Scan(&currentVersion)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return 0, ErrUserNotFound
+		}
+		return 0, fmt.Errorf("failed to lock user for password rotation: %w", err)
+	}
+	if expectedVersion > 0 && currentVersion != expectedVersion {
+		return 0, ErrInvalidCredentials
+	}
+
+	// 2. If backup code used, atomically consume it
 	if len(backupCodeHash) > 0 {
 		res, err := tx.ExecContext(ctx, `
 			UPDATE identity.mfa_backup_codes
@@ -860,7 +884,7 @@ func (r *PostgresRepository) RotatePasswordTx(
 		}
 	}
 
-	// Update password and get newly incremented version
+	// 3. Update password and get newly incremented version
 	var newVersion int64
 	query := `
 		UPDATE identity.users

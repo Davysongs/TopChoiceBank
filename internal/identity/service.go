@@ -263,11 +263,6 @@ func (s *Service) Login(ctx context.Context, req LoginRequest) (*LoginResponse, 
 		return nil, ErrInvalidCredentials
 	}
 
-	user.RecordSuccessfulLogin(now)
-	if err := s.repo.UpdateUserStatusAndLockout(ctx, user); err != nil {
-		return nil, err
-	}
-
 	activeFactor, err := s.repo.GetActiveTOTPFactor(ctx, user.ID)
 	if err != nil {
 		return nil, err
@@ -326,6 +321,15 @@ func (s *Service) Login(ctx context.Context, req LoginRequest) (*LoginResponse, 
 			backupCodeHash = domain.HashBackupCode(req.BackupCode)
 			mfaVerified = true
 		}
+	}
+
+	// Load user roles before creating session to ensure failed role lookup does not consume backup code
+	roles, err := s.repo.GetUserRoles(ctx, user.ID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load user roles: %w", err)
+	}
+	if len(roles) == 0 {
+		roles = []string{}
 	}
 
 	var deviceIDPtr *string
@@ -402,13 +406,9 @@ func (s *Service) Login(ctx context.Context, req LoginRequest) (*LoginResponse, 
 		return nil, err
 	}
 
-	roles, err := s.repo.GetUserRoles(ctx, user.ID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to load user roles: %w", err)
-	}
-	if len(roles) == 0 {
-		roles = []string{}
-	}
+	// Reset failed login count and record successful login upon complete authentication
+	user.RecordSuccessfulLogin(now)
+	_ = s.repo.UpdateUserStatusAndLockout(ctx, user)
 
 	scopes := domain.DefaultScopesForRoles(roles)
 
@@ -539,6 +539,15 @@ func (s *Service) RefreshSession(ctx context.Context, req RefreshRequest) (*Logi
 		UserAgent:        formatUserAgent(req.UserAgent),
 	}
 
+	// Load roles before rotating session so failure leaves refresh token unrotated and usable for retry
+	roles, err := s.repo.GetUserRoles(ctx, agg.Session.UserID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load user roles: %w", err)
+	}
+	if len(roles) == 0 {
+		roles = []string{}
+	}
+
 	oldSessionID := agg.Session.ID
 	rotatedSession, err := agg.Rotate(now, replacement)
 	if err != nil {
@@ -554,14 +563,6 @@ func (s *Service) RefreshSession(ctx context.Context, req RefreshRequest) (*Logi
 			return nil, ErrTokenRevoked
 		}
 		return nil, err
-	}
-
-	roles, err := s.repo.GetUserRoles(ctx, agg.Session.UserID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to load user roles: %w", err)
-	}
-	if len(roles) == 0 {
-		roles = []string{}
 	}
 
 	claims := security.JWTClaims{
@@ -826,7 +827,7 @@ func (s *Service) ChangePassword(ctx context.Context, req ChangePasswordRequest)
 		OccurredAt: now,
 	}
 
-	revokedCount, err := s.repo.RotatePasswordTx(ctx, user.ID, newHash, backupHash, outboxEvent)
+	revokedCount, err := s.repo.RotatePasswordTx(ctx, user.ID, user.Version, newHash, backupHash, outboxEvent)
 	if err != nil {
 		return nil, err
 	}
