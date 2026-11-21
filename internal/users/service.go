@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/Davysongs/TopChoiceBank/internal/identity"
-	"github.com/Davysongs/TopChoiceBank/internal/users/domain"
 	platformdb "github.com/Davysongs/TopChoiceBank/internal/platform/database"
+	"github.com/Davysongs/TopChoiceBank/internal/users/domain"
 )
 
 type AddressInput struct {
@@ -274,4 +274,3 @@ func maskEmail(email string) string {
 	}
 	return name[:1] + "***" + name[len(name)-1:] + "@" + domainPart
 }
-

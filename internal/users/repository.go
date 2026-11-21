@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Davysongs/TopChoiceBank/internal/users/domain"
 	platformdb "github.com/Davysongs/TopChoiceBank/internal/platform/database"
+	"github.com/Davysongs/TopChoiceBank/internal/users/domain"
 	"github.com/lib/pq"
 )
 
@@ -120,23 +120,23 @@ func (r *PostgresRepository) GetProfileByUserID(ctx context.Context, userID stri
 	`
 
 	var (
-		uID          string
-		givenName    string
-		familyName   string
-		dobTime      time.Time
-		phoneE164    string
-		line1        string
-		line2        string
-		city         string
-		region       string
-		postalCode   string
-		countryCode  string
-		stateStr     string
-		submittedAt  *time.Time
-		decidedAt    *time.Time
-		version      int64
-		createdAt    time.Time
-		updatedAt    time.Time
+		uID         string
+		givenName   string
+		familyName  string
+		dobTime     time.Time
+		phoneE164   string
+		line1       string
+		line2       string
+		city        string
+		region      string
+		postalCode  string
+		countryCode string
+		stateStr    string
+		submittedAt *time.Time
+		decidedAt   *time.Time
+		version     int64
+		createdAt   time.Time
+		updatedAt   time.Time
 	)
 
 	err := r.db.QueryRowContext(ctx, query, userID).Scan(
@@ -303,4 +303,3 @@ func nullableString(s string) any {
 	}
 	return s
 }
-

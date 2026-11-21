@@ -17,11 +17,15 @@ var (
 )
 
 type JWTClaims struct {
-	Subject   string `json:"sub"`
-	JTI       string `json:"jti"`
-	Issuer    string `json:"iss"`
-	IssuedAt  int64  `json:"iat"`
-	ExpiresAt int64  `json:"exp"`
+	Subject   string   `json:"sub"`
+	JTI       string   `json:"jti"`
+	Issuer    string   `json:"iss"`
+	IssuedAt  int64    `json:"iat"`
+	ExpiresAt int64    `json:"exp"`
+	Roles     []string `json:"roles,omitempty"`
+	Scopes    []string `json:"scopes,omitempty"`
+	AMR       []string `json:"amr,omitempty"`
+	AuthTime  int64    `json:"auth_time,omitempty"`
 }
 
 type TokenPair struct {
@@ -33,6 +37,18 @@ type TokenPair struct {
 
 // GenerateAccessToken creates an HMAC-SHA256 access token for a user.
 func GenerateAccessToken(secret string, userID string, jti string, now time.Time, duration time.Duration) (string, error) {
+	claims := JWTClaims{
+		Subject:   userID,
+		JTI:       jti,
+		Issuer:    "topchoicebank",
+		IssuedAt:  now.Unix(),
+		ExpiresAt: now.Add(duration).Unix(),
+	}
+	return GenerateAccessTokenWithClaims(secret, claims)
+}
+
+// GenerateAccessTokenWithClaims creates an HMAC-SHA256 access token with full claims.
+func GenerateAccessTokenWithClaims(secret string, claims JWTClaims) (string, error) {
 	if secret == "" {
 		return "", errors.New("jwt secret is required")
 	}
@@ -47,12 +63,8 @@ func GenerateAccessToken(secret string, userID string, jti string, now time.Time
 		return "", err
 	}
 
-	claims := JWTClaims{
-		Subject:   userID,
-		JTI:       jti,
-		Issuer:    "topchoicebank",
-		IssuedAt:  now.Unix(),
-		ExpiresAt: now.Add(duration).Unix(),
+	if claims.Issuer == "" {
+		claims.Issuer = "topchoicebank"
 	}
 
 	claimsJSON, err := json.Marshal(claims)
@@ -72,7 +84,7 @@ func GenerateAccessToken(secret string, userID string, jti string, now time.Time
 	return fmt.Sprintf("%s.%s", unsignedToken, signature), nil
 }
 
-// VerifyAccessToken validates an access token's signature, claims, and expiration.
+// VerifyAccessToken validates an access token's signature, algorithm, claims, and expiration.
 func VerifyAccessToken(secret string, tokenStr string, now time.Time) (*JWTClaims, error) {
 	if secret == "" {
 		return nil, errors.New("jwt secret is required")
@@ -80,6 +92,19 @@ func VerifyAccessToken(secret string, tokenStr string, now time.Time) (*JWTClaim
 
 	parts := strings.Split(tokenStr, ".")
 	if len(parts) != 3 {
+		return nil, ErrInvalidToken
+	}
+
+	headerBytes, err := base64.RawURLEncoding.DecodeString(parts[0])
+	if err != nil {
+		return nil, ErrInvalidToken
+	}
+
+	var header struct {
+		Alg string `json:"alg"`
+		Typ string `json:"typ"`
+	}
+	if err := json.Unmarshal(headerBytes, &header); err != nil || header.Alg != "HS256" {
 		return nil, ErrInvalidToken
 	}
 
@@ -102,8 +127,16 @@ func VerifyAccessToken(secret string, tokenStr string, now time.Time) (*JWTClaim
 		return nil, ErrInvalidToken
 	}
 
-	if now.Unix() >= claims.ExpiresAt {
+	if strings.TrimSpace(claims.Subject) == "" {
+		return nil, ErrInvalidToken
+	}
+
+	if claims.ExpiresAt <= 0 || now.Unix() >= claims.ExpiresAt {
 		return nil, ErrExpiredToken
+	}
+
+	if claims.Issuer != "" && claims.Issuer != "topchoicebank" {
+		return nil, ErrInvalidToken
 	}
 
 	return &claims, nil

@@ -61,4 +61,3 @@ func (p Phone) Equals(other Phone) bool {
 func (p Phone) IsZero() bool {
 	return p.value == ""
 }
-

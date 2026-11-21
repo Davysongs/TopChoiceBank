@@ -1,0 +1,635 @@
+package oauth
+
+import (
+	"context"
+	"crypto/sha256"
+	"database/sql"
+	"encoding/hex"
+	"errors"
+	"fmt"
+	"net/url"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/lib/pq"
+	"github.com/ory/fosite"
+	"github.com/ory/fosite/handler/openid"
+	"github.com/ory/fosite/storage"
+)
+
+// setSessionSubject sets the user subject on the provided fosite session if supported.
+func setSessionSubject(session fosite.Session, userID string) fosite.Session {
+	if session == nil {
+		return &openid.DefaultSession{Subject: userID}
+	}
+	if s, ok := session.(*openid.DefaultSession); ok {
+		s.Subject = userID
+		return s
+	}
+	if s, ok := session.(*fosite.DefaultSession); ok {
+		s.Subject = userID
+		return s
+	}
+	return session
+}
+
+// PostgresOAuthStore implements fosite storage backed by PostgreSQL and an in-memory cache.
+type PostgresOAuthStore struct {
+	*storage.MemoryStore
+	db               *sql.DB
+	consumedConsents map[string]time.Time
+	consumedMu       sync.RWMutex
+	clientsMu        sync.RWMutex
+}
+
+// NewPostgresOAuthStore initializes a new PostgresOAuthStore.
+func NewPostgresOAuthStore(db *sql.DB) *PostgresOAuthStore {
+	return &PostgresOAuthStore{
+		MemoryStore:      storage.NewMemoryStore(),
+		db:               db,
+		consumedConsents: make(map[string]time.Time),
+	}
+}
+
+// ConsumeConsentID atomically marks a consent token identifier as consumed in PostgreSQL or memory.
+func (s *PostgresOAuthStore) ConsumeConsentID(ctx context.Context, consentID string) error {
+	if s.db != nil {
+		_, err := s.db.ExecContext(ctx, `
+			INSERT INTO identity.oauth_consumed_consents (consent_id, consumed_at)
+			VALUES ($1, clock_timestamp())
+		`, consentID)
+		if err != nil {
+			var pqErr *pq.Error
+			if errors.As(err, &pqErr) && pqErr.Code == "23505" {
+				return errors.New("consent token has already been consumed")
+			}
+			return fmt.Errorf("failed to record consumed consent token: %w", err)
+		}
+		return nil
+	}
+
+	s.consumedMu.Lock()
+	defer s.consumedMu.Unlock()
+	if _, exists := s.consumedConsents[consentID]; exists {
+		return errors.New("consent token has already been consumed")
+	}
+	s.consumedConsents[consentID] = time.Now().UTC()
+	return nil
+}
+
+// RegisterClient registers an OAuth client in both PostgreSQL and the in-memory cache.
+func (s *PostgresOAuthStore) RegisterClient(ctx context.Context, client *fosite.DefaultClient, clientName string) error {
+	clientType := "PUBLIC"
+	if len(client.Secret) > 0 {
+		clientType = "CONFIDENTIAL"
+	}
+
+	if s.db != nil {
+		query := `
+			INSERT INTO identity.oauth_clients (
+				client_id, client_name, client_type, secret_hash, redirect_uris, allowed_scopes, status, created_at
+			) VALUES ($1, $2, $3, $4, $5, $6, 'ACTIVE', clock_timestamp())
+			ON CONFLICT (client_id) DO UPDATE SET
+				client_name = EXCLUDED.client_name,
+				client_type = EXCLUDED.client_type,
+				secret_hash = EXCLUDED.secret_hash,
+				redirect_uris = EXCLUDED.redirect_uris,
+				allowed_scopes = EXCLUDED.allowed_scopes,
+				status = 'ACTIVE'
+		`
+		var secretParam any = nil
+		if clientType == "CONFIDENTIAL" && len(client.Secret) > 0 {
+			secretParam = client.Secret
+		}
+
+		_, err := s.db.ExecContext(ctx, query,
+			client.ID,
+			clientName,
+			clientType,
+			secretParam,
+			pq.Array(client.RedirectURIs),
+			pq.Array(client.Scopes),
+		)
+		if err != nil {
+			return fmt.Errorf("failed to register oauth client in postgres: %w", err)
+		}
+	}
+
+	s.clientsMu.Lock()
+	s.MemoryStore.Clients[client.ID] = client
+	s.clientsMu.Unlock()
+	return nil
+}
+
+// GetClient retrieves an active OAuth client by client ID from PostgreSQL or memory.
+func (s *PostgresOAuthStore) GetClient(ctx context.Context, id string) (fosite.Client, error) {
+	if s.db != nil {
+		query := `
+			SELECT client_id, client_type, secret_hash, redirect_uris, allowed_scopes, status
+			FROM identity.oauth_clients
+			WHERE client_id = $1 AND status = 'ACTIVE'
+		`
+		var (
+			clientID      string
+			clientType    string
+			secretHash    []byte
+			redirectURIs  []string
+			allowedScopes []string
+			status        string
+		)
+		err := s.db.QueryRowContext(ctx, query, id).Scan(
+			&clientID, &clientType, &secretHash, pq.Array(&redirectURIs), pq.Array(&allowedScopes), &status,
+		)
+		if err == nil {
+			c := &fosite.DefaultClient{
+				ID:            clientID,
+				Secret:        secretHash,
+				RedirectURIs:  redirectURIs,
+				GrantTypes:    []string{"authorization_code"},
+				ResponseTypes: []string{"code"},
+				Scopes:        allowedScopes,
+				Public:        clientType == "PUBLIC",
+			}
+			return c, nil
+		}
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, fosite.ErrNotFound
+		}
+		return nil, fmt.Errorf("failed to query oauth client: %w", err)
+	}
+
+	s.clientsMu.RLock()
+	defer s.clientsMu.RUnlock()
+	return s.MemoryStore.GetClient(ctx, id)
+}
+
+// CreateAuthorizeCodeSession stores the authorization code session in memory and PostgreSQL.
+func (s *PostgresOAuthStore) CreateAuthorizeCodeSession(ctx context.Context, code string, req fosite.Requester) error {
+	codeHash := sha256.Sum256([]byte(code))
+	stableID := hex.EncodeToString(codeHash[:])
+	req.SetID(stableID)
+
+	pkceChallenge := req.GetRequestForm().Get("code_challenge")
+	pkceMethod := req.GetRequestForm().Get("code_challenge_method")
+	if pkceMethod == "" {
+		pkceMethod = "S256"
+	}
+
+	if err := s.MemoryStore.CreateAuthorizeCodeSession(ctx, code, req); err != nil {
+		return err
+	}
+
+	if s.db == nil {
+		return nil
+	}
+
+	clientID := req.GetClient().GetID()
+
+	var clientUUID string
+	err := s.db.QueryRowContext(ctx, "SELECT id FROM identity.oauth_clients WHERE client_id = $1", clientID).Scan(&clientUUID)
+	if err != nil {
+		return fmt.Errorf("failed to find oauth client uuid: %w", err)
+	}
+
+	userID := req.GetSession().GetSubject()
+	if strings.TrimSpace(userID) == "" {
+		return errors.New("missing user id in session")
+	}
+
+	redirectURI := req.GetRequestForm().Get("redirect_uri")
+
+	scopes := make([]string, 0)
+	for _, sc := range req.GetGrantedScopes() {
+		scopes = append(scopes, sc)
+	}
+
+	expiresAt := time.Now().UTC().Add(10 * time.Minute)
+
+	insertQuery := `
+		INSERT INTO identity.oauth_authorization_codes (
+			code_hash, client_id, user_id, redirect_uri, scopes,
+			pkce_challenge, pkce_method, expires_at, issued_at
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, clock_timestamp())
+	`
+	_, err = s.db.ExecContext(ctx, insertQuery,
+		codeHash[:],
+		clientUUID,
+		userID,
+		redirectURI,
+		pq.Array(scopes),
+		pkceChallenge,
+		pkceMethod,
+		expiresAt,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to persist authorization code: %w", err)
+	}
+
+	return nil
+}
+
+// GetAuthorizeCodeSession hydrates and returns the session, verifying single-use consumption in PostgreSQL.
+func (s *PostgresOAuthStore) GetAuthorizeCodeSession(ctx context.Context, code string, session fosite.Session) (fosite.Requester, error) {
+	if s.db != nil {
+		codeHash := sha256.Sum256([]byte(code))
+		var (
+			usedAt        sql.NullTime
+			expiresAt     time.Time
+			clientID      string
+			userID        string
+			redirectURI   string
+			scopes        []string
+			pkceChallenge string
+			pkceMethod    string
+		)
+
+		err := s.db.QueryRowContext(ctx, `
+			SELECT c.client_id, a.user_id, a.redirect_uri, a.scopes,
+			       a.pkce_challenge, a.pkce_method, a.expires_at, a.used_at
+			FROM identity.oauth_authorization_codes a
+			JOIN identity.oauth_clients c ON a.client_id = c.id
+			WHERE a.code_hash = $1
+		`, codeHash[:]).Scan(
+			&clientID, &userID, &redirectURI, pq.Array(&scopes),
+			&pkceChallenge, &pkceMethod, &expiresAt, &usedAt,
+		)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return nil, fosite.ErrNotFound
+			}
+			return nil, fmt.Errorf("failed to query authorization code: %w", err)
+		}
+
+		if usedAt.Valid {
+			// Code reuse detected!
+			req, memErr := s.MemoryStore.GetAuthorizeCodeSession(ctx, code, session)
+			if req != nil && (memErr == nil || errors.Is(memErr, fosite.ErrInvalidatedAuthorizeCode)) {
+				return req, fosite.ErrInvalidatedAuthorizeCode
+			}
+			// Reconstruct req from DB so Fosite can revoke tokens on code reuse
+			client, _ := s.GetClient(ctx, clientID)
+			sess := setSessionSubject(session, userID)
+			reconstructed := &fosite.Request{
+				ID:             hex.EncodeToString(codeHash[:]),
+				Client:         client,
+				RequestedScope: fosite.Arguments(scopes),
+				GrantedScope:   fosite.Arguments(scopes),
+				Form: url.Values{
+					"redirect_uri":          {redirectURI},
+					"code_challenge":        {pkceChallenge},
+					"code_challenge_method": {pkceMethod},
+				},
+				Session:     sess,
+				RequestedAt: expiresAt.Add(-10 * time.Minute),
+			}
+			return reconstructed, fosite.ErrInvalidatedAuthorizeCode
+		}
+
+		if expiresAt.Before(time.Now().UTC()) {
+			return nil, fosite.ErrTokenExpired
+		}
+
+		req, err := s.MemoryStore.GetAuthorizeCodeSession(ctx, code, session)
+		if err == nil && req != nil {
+			return req, nil
+		}
+
+		// Reconstruct from DB when MemoryStore does not contain it
+		client, clientErr := s.GetClient(ctx, clientID)
+		if clientErr != nil {
+			return nil, clientErr
+		}
+		sess := setSessionSubject(session, userID)
+		reconstructed := &fosite.Request{
+			ID:             hex.EncodeToString(codeHash[:]),
+			Client:         client,
+			RequestedScope: fosite.Arguments(scopes),
+			GrantedScope:   fosite.Arguments(scopes),
+			Form: url.Values{
+				"redirect_uri":          {redirectURI},
+				"code_challenge":        {pkceChallenge},
+				"code_challenge_method": {pkceMethod},
+			},
+			Session:     sess,
+			RequestedAt: expiresAt.Add(-10 * time.Minute),
+		}
+		return reconstructed, nil
+	}
+
+	return s.MemoryStore.GetAuthorizeCodeSession(ctx, code, session)
+}
+
+// CreatePKCERequestSession stores the PKCE requester session in memory and PostgreSQL.
+func (s *PostgresOAuthStore) CreatePKCERequestSession(ctx context.Context, signature string, req fosite.Requester) error {
+	if err := s.MemoryStore.CreatePKCERequestSession(ctx, signature, req); err != nil {
+		return err
+	}
+
+	if s.db != nil {
+		codeHash := sha256.Sum256([]byte(signature))
+		challenge := req.GetRequestForm().Get("code_challenge")
+		method := req.GetRequestForm().Get("code_challenge_method")
+		if method == "" {
+			method = "S256"
+		}
+		if challenge != "" {
+			_, err := s.db.ExecContext(ctx, `
+				UPDATE identity.oauth_authorization_codes
+				SET pkce_challenge = $2, pkce_method = $3
+				WHERE code_hash = $1
+			`, codeHash[:], challenge, method)
+			if err != nil {
+				return fmt.Errorf("failed to persist pkce parameters to postgres: %w", err)
+			}
+		}
+	}
+
+	return nil
+}
+
+// GetPKCERequestSession retrieves the PKCE requester session from memory or PostgreSQL.
+func (s *PostgresOAuthStore) GetPKCERequestSession(ctx context.Context, signature string, session fosite.Session) (fosite.Requester, error) {
+	req, err := s.MemoryStore.GetPKCERequestSession(ctx, signature, session)
+	if err == nil && req != nil {
+		return req, nil
+	}
+
+	if s.db != nil {
+		codeHash := sha256.Sum256([]byte(signature))
+		var (
+			clientID      string
+			userID        string
+			redirectURI   string
+			scopes        []string
+			pkceChallenge string
+			pkceMethod    string
+			expiresAt     time.Time
+			usedAt        sql.NullTime
+		)
+
+		err := s.db.QueryRowContext(ctx, `
+			SELECT c.client_id, a.user_id, a.redirect_uri, a.scopes,
+			       a.pkce_challenge, a.pkce_method, a.expires_at, a.used_at
+			FROM identity.oauth_authorization_codes a
+			JOIN identity.oauth_clients c ON a.client_id = c.id
+			WHERE a.code_hash = $1
+		`, codeHash[:]).Scan(
+			&clientID, &userID, &redirectURI, pq.Array(&scopes),
+			&pkceChallenge, &pkceMethod, &expiresAt, &usedAt,
+		)
+		if err == nil {
+			client, clientErr := s.GetClient(ctx, clientID)
+			if clientErr != nil {
+				return nil, clientErr
+			}
+			sess := setSessionSubject(session, userID)
+			reconstructed := &fosite.Request{
+				ID:             hex.EncodeToString(codeHash[:]),
+				Client:         client,
+				RequestedScope: fosite.Arguments(scopes),
+				GrantedScope:   fosite.Arguments(scopes),
+				Form: url.Values{
+					"redirect_uri":          {redirectURI},
+					"code_challenge":        {pkceChallenge},
+					"code_challenge_method": {pkceMethod},
+				},
+				Session:     sess,
+				RequestedAt: expiresAt.Add(-10 * time.Minute),
+			}
+			return reconstructed, nil
+		}
+	}
+
+	return nil, fosite.ErrNotFound
+}
+
+// InvalidateAuthorizeCodeSession marks an authorization code as consumed, preventing replay attacks.
+func (s *PostgresOAuthStore) InvalidateAuthorizeCodeSession(ctx context.Context, code string) error {
+	if s.db != nil {
+		codeHash := sha256.Sum256([]byte(code))
+		res, err := s.db.ExecContext(ctx, `
+			UPDATE identity.oauth_authorization_codes
+			SET used_at = clock_timestamp()
+			WHERE code_hash = $1 AND used_at IS NULL
+		`, codeHash[:])
+		if err != nil {
+			return fmt.Errorf("failed to invalidate authorization code in postgres: %w", err)
+		}
+
+		rows, err := res.RowsAffected()
+		if err != nil {
+			return err
+		}
+		if rows == 0 {
+			return fosite.ErrInvalidatedAuthorizeCode
+		}
+	}
+
+	memErr := s.MemoryStore.InvalidateAuthorizeCodeSession(ctx, code)
+	if memErr != nil && !errors.Is(memErr, fosite.ErrNotFound) {
+		return memErr
+	}
+	return nil
+}
+
+// CreateAccessTokenSession stores an OAuth access token session in memory and PostgreSQL.
+func (s *PostgresOAuthStore) CreateAccessTokenSession(ctx context.Context, signature string, req fosite.Requester) error {
+	if err := s.MemoryStore.CreateAccessTokenSession(ctx, signature, req); err != nil {
+		return err
+	}
+
+	if s.db == nil {
+		return nil
+	}
+
+	sigHash := sha256.Sum256([]byte(signature))
+	reqID := req.GetID()
+	clientID := req.GetClient().GetID()
+	userID := req.GetSession().GetSubject()
+	requestedAt := req.GetRequestedAt()
+
+	scopes := make([]string, 0)
+	for _, sc := range req.GetGrantedScopes() {
+		scopes = append(scopes, sc)
+	}
+
+	expiresAt := time.Now().UTC().Add(1 * time.Hour)
+	if expSession := req.GetSession(); expSession != nil {
+		if t := expSession.GetExpiresAt(fosite.AccessToken); !t.IsZero() {
+			expiresAt = t
+		}
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	if reqID != "" {
+		_, err = tx.ExecContext(ctx, "SELECT pg_advisory_xact_lock(hashtext($1))", reqID)
+		if err != nil {
+			return fmt.Errorf("failed to acquire advisory lock: %w", err)
+		}
+	}
+
+	isRevoked := false
+	if codeHash, decErr := hex.DecodeString(reqID); decErr == nil && len(codeHash) == 32 {
+		var revokedAt sql.NullTime
+		err = tx.QueryRowContext(ctx, `
+			SELECT revoked_at
+			FROM identity.oauth_authorization_codes
+			WHERE code_hash = $1
+			FOR UPDATE
+		`, codeHash).Scan(&revokedAt)
+		if err == nil && revokedAt.Valid {
+			isRevoked = true
+		}
+	}
+
+	query := `
+		INSERT INTO identity.oauth_access_tokens (
+			signature_hash, request_id, client_id, user_id, scopes,
+			requested_at, expires_at, revoked
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		ON CONFLICT (signature_hash) DO NOTHING
+	`
+	_, err = tx.ExecContext(ctx, query,
+		sigHash[:],
+		reqID,
+		clientID,
+		userID,
+		pq.Array(scopes),
+		requestedAt,
+		expiresAt,
+		isRevoked,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to persist access token: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit access token session: %w", err)
+	}
+
+	if isRevoked {
+		_ = s.MemoryStore.RevokeAccessToken(ctx, reqID)
+	}
+
+	return nil
+}
+
+// GetAccessTokenSession retrieves an OAuth access token session from memory or PostgreSQL.
+func (s *PostgresOAuthStore) GetAccessTokenSession(ctx context.Context, signature string, session fosite.Session) (fosite.Requester, error) {
+	if s.db != nil {
+		sigHash := sha256.Sum256([]byte(signature))
+		var (
+			requestID   string
+			clientID    string
+			userID      string
+			scopes      []string
+			requestedAt time.Time
+			expiresAt   time.Time
+			revoked     bool
+		)
+
+		err := s.db.QueryRowContext(ctx, `
+			SELECT request_id, client_id, user_id, scopes, requested_at, expires_at, revoked
+			FROM identity.oauth_access_tokens
+			WHERE signature_hash = $1
+		`, sigHash[:]).Scan(
+			&requestID, &clientID, &userID, pq.Array(&scopes),
+			&requestedAt, &expiresAt, &revoked,
+		)
+		if err == nil {
+			if revoked {
+				return nil, fosite.ErrInactiveToken
+			}
+			if expiresAt.Before(time.Now().UTC()) {
+				return nil, fosite.ErrTokenExpired
+			}
+
+			memReq, memErr := s.MemoryStore.GetAccessTokenSession(ctx, signature, session)
+			if memErr == nil && memReq != nil {
+				return memReq, nil
+			}
+
+			client, clientErr := s.GetClient(ctx, clientID)
+			if clientErr != nil {
+				return nil, clientErr
+			}
+			sess := setSessionSubject(session, userID)
+			reconstructed := &fosite.Request{
+				ID:             requestID,
+				Client:         client,
+				RequestedScope: fosite.Arguments(scopes),
+				GrantedScope:   fosite.Arguments(scopes),
+				Session:        sess,
+				RequestedAt:    requestedAt,
+			}
+			return reconstructed, nil
+		}
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, fosite.ErrNotFound
+		}
+		return nil, fmt.Errorf("failed to query access token: %w", err)
+	}
+
+	return s.MemoryStore.GetAccessTokenSession(ctx, signature, session)
+}
+
+// DeleteAccessTokenSession deletes an OAuth access token session from memory and PostgreSQL.
+func (s *PostgresOAuthStore) DeleteAccessTokenSession(ctx context.Context, signature string) error {
+	_ = s.MemoryStore.DeleteAccessTokenSession(ctx, signature)
+
+	if s.db != nil {
+		sigHash := sha256.Sum256([]byte(signature))
+		_, err := s.db.ExecContext(ctx, "DELETE FROM identity.oauth_access_tokens WHERE signature_hash = $1", sigHash[:])
+		if err != nil {
+			return fmt.Errorf("failed to delete access token from postgres: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// RevokeAccessToken marks all access tokens matching requestID as revoked.
+func (s *PostgresOAuthStore) RevokeAccessToken(ctx context.Context, requestID string) error {
+	_ = s.MemoryStore.RevokeAccessToken(ctx, requestID)
+
+	if s.db != nil {
+		tx, err := s.db.BeginTx(ctx, nil)
+		if err != nil {
+			return err
+		}
+		defer tx.Rollback()
+
+		if requestID != "" {
+			_, err = tx.ExecContext(ctx, "SELECT pg_advisory_xact_lock(hashtext($1))", requestID)
+			if err != nil {
+				return fmt.Errorf("failed to acquire advisory lock: %w", err)
+			}
+		}
+
+		if codeHash, decErr := hex.DecodeString(requestID); decErr == nil && len(codeHash) == 32 {
+			_, err = tx.ExecContext(ctx, `
+				UPDATE identity.oauth_authorization_codes
+				SET revoked_at = clock_timestamp()
+				WHERE code_hash = $1
+			`, codeHash)
+			if err != nil {
+				return fmt.Errorf("failed to mark authorization code revoked: %w", err)
+			}
+		}
+
+		_, err = tx.ExecContext(ctx, "UPDATE identity.oauth_access_tokens SET revoked = true WHERE request_id = $1", requestID)
+		if err != nil {
+			return fmt.Errorf("failed to revoke access token in postgres: %w", err)
+		}
+
+		return tx.Commit()
+	}
+
+	return nil
+}

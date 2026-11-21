@@ -643,4 +643,3 @@ func TestProfile_ContactUpdates(t *testing.T) {
 		}
 	})
 }
-

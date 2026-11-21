@@ -112,4 +112,3 @@ func (d DateOfBirth) Equals(other DateOfBirth) bool {
 func (d DateOfBirth) IsZero() bool {
 	return d.year == 0 && d.month == 0 && d.day == 0
 }
-

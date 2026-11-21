@@ -63,4 +63,3 @@ func (l LegalName) Equals(other LegalName) bool {
 func (l LegalName) IsZero() bool {
 	return l.givenName == "" && l.familyName == ""
 }
-
