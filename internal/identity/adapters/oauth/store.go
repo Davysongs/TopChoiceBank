@@ -452,7 +452,7 @@ func (s *PostgresOAuthStore) CreateAccessTokenSession(ctx context.Context, signa
 	}
 
 	expiresAt := time.Now().UTC().Add(1 * time.Hour)
-	if expSession, ok := req.GetSession().(fosite.Session); ok && expSession != nil {
+	if expSession := req.GetSession(); expSession != nil {
 		if t := expSession.GetExpiresAt(fosite.AccessToken); !t.IsZero() {
 			expiresAt = t
 		}
