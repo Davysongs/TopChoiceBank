@@ -186,9 +186,14 @@ func TestMFAEnrollmentVerificationAndSingleActiveInvariant(t *testing.T) {
 	}
 
 	// 5. Verification with invalid TOTP code fails
+	// Generate well-formed 6-digit code far outside window to guarantee no match against accepted time steps
+	badCode, err := totp.GenerateCode(secret, time.Now().UTC().Add(-10*time.Minute))
+	if err != nil {
+		t.Fatalf("failed to generate bad totp code: %v", err)
+	}
 	badVerifyBody, _ := json.Marshal(map[string]string{
 		"factor_id": enrollData.FactorID,
-		"code":      "000000",
+		"code":      badCode,
 	})
 	reqBadVerify, _ := http.NewRequest(http.MethodPost, server.URL+"/v1/auth/mfa/verify", bytes.NewBuffer(badVerifyBody))
 	reqBadVerify.Header.Set("Authorization", "Bearer "+token)
@@ -419,13 +424,27 @@ func TestPasswordChangeRequiresMFAAndRevokesSessions(t *testing.T) {
 	reqEnroll, _ := http.NewRequest(http.MethodPost, server.URL+"/v1/auth/mfa/enrol", bytes.NewBuffer(enrollBody))
 	reqEnroll.Header.Set("Authorization", "Bearer "+token)
 	reqEnroll.Header.Set("Content-Type", "application/json")
-	enrollResp, _ := http.DefaultClient.Do(reqEnroll)
+	enrollResp, err := http.DefaultClient.Do(reqEnroll)
+	if err != nil {
+		t.Fatalf("failed to call enroll: %v", err)
+	}
+	defer enrollResp.Body.Close()
+	if enrollResp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 OK from enroll, got %d", enrollResp.StatusCode)
+	}
 	var enrollData identity.EnrollTOTPResponse
-	_ = json.NewDecoder(enrollResp.Body).Decode(&enrollData)
-	enrollResp.Body.Close()
+	if err := json.NewDecoder(enrollResp.Body).Decode(&enrollData); err != nil {
+		t.Fatalf("failed to decode enroll response: %v", err)
+	}
 
-	secret, _ := extractSecretFromOTPAuthURI(enrollData.OtpauthURI)
-	verifyCode, _ := totp.GenerateCode(secret, time.Now().UTC())
+	secret, err := extractSecretFromOTPAuthURI(enrollData.OtpauthURI)
+	if err != nil {
+		t.Fatalf("failed to extract secret: %v", err)
+	}
+	verifyCode, err := totp.GenerateCode(secret, time.Now().UTC())
+	if err != nil {
+		t.Fatalf("failed to generate code: %v", err)
+	}
 
 	verifyBody, _ := json.Marshal(map[string]string{
 		"factor_id": enrollData.FactorID,
@@ -434,8 +453,14 @@ func TestPasswordChangeRequiresMFAAndRevokesSessions(t *testing.T) {
 	reqVerify, _ := http.NewRequest(http.MethodPost, server.URL+"/v1/auth/mfa/verify", bytes.NewBuffer(verifyBody))
 	reqVerify.Header.Set("Authorization", "Bearer "+token)
 	reqVerify.Header.Set("Content-Type", "application/json")
-	verifyResp, _ := http.DefaultClient.Do(reqVerify)
-	verifyResp.Body.Close()
+	verifyResp, err := http.DefaultClient.Do(reqVerify)
+	if err != nil {
+		t.Fatalf("failed to call verify: %v", err)
+	}
+	defer verifyResp.Body.Close()
+	if verifyResp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 OK from verify, got %d", verifyResp.StatusCode)
+	}
 
 	// 1. Password change without TOTP code or recent MFA fails
 	newPassword := "NewBrandPassword2026!"
