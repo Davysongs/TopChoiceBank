@@ -104,7 +104,8 @@ func grantUserRole(ctx context.Context, db *sql.DB, email, roleName, grantedBy s
 	return nil
 }
 
-// ensureDefaultCustomerRoles ensures every registered user has at least the 'customer' role.
+// ensureDefaultCustomerRoles ensures every registered user has at least the 'customer' role
+// if they do not already possess any active roles.
 func ensureDefaultCustomerRoles(ctx context.Context, db *sql.DB) (int64, error) {
 	query := `
 		INSERT INTO identity.user_roles (user_id, role_id, granted_at)
@@ -114,7 +115,7 @@ func ensureDefaultCustomerRoles(ctx context.Context, db *sql.DB) (int64, error) 
 		WHERE r.name = 'customer'
 		  AND NOT EXISTS (
 			  SELECT 1 FROM identity.user_roles ur
-			  WHERE ur.user_id = u.id AND ur.role_id = r.id AND ur.revoked_at IS NULL
+			  WHERE ur.user_id = u.id AND ur.revoked_at IS NULL
 		  )
 		ON CONFLICT (user_id, role_id) DO UPDATE SET revoked_at = NULL
 	`
